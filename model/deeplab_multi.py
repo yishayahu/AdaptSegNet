@@ -119,10 +119,11 @@ class Classifier_Module(nn.Module):
 
 
 class ResNetMulti(nn.Module):
-    def __init__(self, block, layers, num_classes):
+    def __init__(self, block, layers, num_classes,n_channels,get_bottleneck = False):
         self.inplanes = 64
         super(ResNetMulti, self).__init__()
-        self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3,
+        self.get_bottleneck  = get_bottleneck
+        self.conv1 = nn.Conv2d(n_channels, 64, kernel_size=7, stride=2, padding=3,
                                bias=False)
         self.bn1 = nn.BatchNorm2d(64, affine=affine_par)
         for i in self.bn1.parameters():
@@ -172,14 +173,14 @@ class ResNetMulti(nn.Module):
         x = self.relu(x)
         x = self.maxpool(x)
         x = self.layer1(x)
-        x = self.layer2(x)
-
-        x = self.layer3(x)
+        xb = self.layer2(x)
+        x = self.layer3(xb)
         x1 = self.layer5(x)
 
         x2 = self.layer4(x)
         x2 = self.layer6(x2)
-
+        if self.get_bottleneck:
+            return x1,x2,xb
         return x1, x2
 
     def get_1x_lr_params_NOscale(self):
@@ -219,12 +220,12 @@ class ResNetMulti(nn.Module):
             for i in b[j]:
                 yield i
 
-    def optim_parameters(self, args):
-        return [{'params': self.get_1x_lr_params_NOscale(), 'lr': args.learning_rate},
-                {'params': self.get_10x_lr_params(), 'lr': 10 * args.learning_rate}]
+    def optim_parameters(self, config):
+        return [{'params': self.get_1x_lr_params_NOscale(), 'lr': config.lr},
+                {'params': self.get_10x_lr_params(), 'lr': 10 * config.lr}]
 
 
-def DeeplabMulti(num_classes=21):
-    model = ResNetMulti(Bottleneck, [3, 4, 23, 3], num_classes)
+def DeeplabMulti(num_classes,n_channels):
+    model = ResNetMulti(Bottleneck, [3, 4, 23, 3], num_classes,n_channels)
     return model
 

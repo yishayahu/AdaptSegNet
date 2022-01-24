@@ -1,6 +1,18 @@
 import argparse
+import dataclasses
+import json
+from dataclasses import dataclass
+from functools import partial
+from pathlib import Path
+import matplotlib.cm as mplcm
+import matplotlib.colors as mplcolors
 import torch
 import torch.nn as nn
+import wandb
+from scipy.optimize import linear_sum_assignment
+from sklearn.cluster import KMeans
+from sklearn.decomposition import PCA
+from sklearn.manifold import TSNE
 from torch.utils import data, model_zoo
 import numpy as np
 import pickle
@@ -14,37 +26,66 @@ import os
 import os.path as osp
 import matplotlib.pyplot as plt
 import random
+from dpipe.io import load
+from tqdm import tqdm
 
+from dataset.cc359_dataset import CC359Ds
+from dataset.msm_dataset import MultiSiteMri
 from model.deeplab_multi import DeeplabMulti
 from model.discriminator import FCDiscriminator
-from utils.loss import CrossEntropy2d
+from utils.loss import CrossEntropy2d, freeze_model
 from dataset.gta5_dataset import GTA5DataSet
 from dataset.cityscapes_dataset import cityscapesDataSet
+from scipy import ndimage
+from configs import *
+import surface_distance.metrics as surf_dc
+def sdice(a, b, spacing, tolerance=1):
+    if np.count_nonzero(a) == 0:
+        non_zeros = np.count_nonzero(b)
+        if  non_zeros == 0:
+            return 1
+    surface_distances = surf_dc.compute_surface_distances(b, a, spacing)
+    return surf_dc.compute_surface_dice_at_tolerance(surface_distances, tolerance)
 
+
+def _connectivity_region_analysis(mask):
+    s = [[0,1,0],
+         [1,1,1],
+         [0,1,0]]
+    label_im, nb_labels = ndimage.label(mask)#, structure=s)
+
+    sizes = ndimage.sum(mask, label_im, range(nb_labels + 1))
+
+    # plt.imshow(label_im)
+    label_im[label_im != np.argmax(sizes)] = 0
+    label_im[label_im == np.argmax(sizes)] = 1
+
+    return label_im
+def dice(gt,pred):
+    g = np.zeros(gt.shape)
+    p = np.zeros(pred.shape)
+    g[gt == 1] = 1
+    p[pred == 1] = 1
+    return (2*np.sum(g*p))/(np.sum(g)+np.sum(p))
+
+if True:
+    config = DebugMsm()
+else:
+    config = DebugConfig()
 IMG_MEAN = np.array((104.00698793, 116.66876762, 122.67891434), dtype=np.float32)
 
 MODEL = 'DeepLab'
-BATCH_SIZE = 1
 ITER_SIZE = 1
 NUM_WORKERS = 4
-DATA_DIRECTORY = './data/GTA5'
-DATA_LIST_PATH = './dataset/gta5_list/train.txt'
 IGNORE_LABEL = 255
-INPUT_SIZE = '1280,720'
-DATA_DIRECTORY_TARGET = './data/Cityscapes/data'
-DATA_LIST_PATH_TARGET = './dataset/cityscapes_list/train.txt'
-INPUT_SIZE_TARGET = '1024,512'
-LEARNING_RATE = 2.5e-4
 MOMENTUM = 0.9
-NUM_CLASSES = 19
-NUM_STEPS = 250000
+NUM_CLASSES = 2
 NUM_STEPS_STOP = 150000  # early stopping
 POWER = 0.9
 RANDOM_SEED = 1234
-RESTORE_FROM = 'http://vllab.ucmerced.edu/ytsai/CVPR18/DeepLab_resnet_pretrained_init-f81d91e8.pth'
+
 SAVE_NUM_IMAGES = 2
-SAVE_PRED_EVERY = 5000
-SNAPSHOT_DIR = './snapshots/'
+
 WEIGHT_DECAY = 0.0005
 
 LEARNING_RATE_D = 1e-4
@@ -53,7 +94,6 @@ LAMBDA_ADV_TARGET1 = 0.0002
 LAMBDA_ADV_TARGET2 = 0.001
 GAN = 'Vanilla'
 
-TARGET = 'cityscapes'
 SET = 'train'
 
 
@@ -66,32 +106,14 @@ def get_arguments():
     parser = argparse.ArgumentParser(description="DeepLab-ResNet Network")
     parser.add_argument("--model", type=str, default=MODEL,
                         help="available options : DeepLab")
-    parser.add_argument("--target", type=str, default=TARGET,
-                        help="available options : cityscapes")
-    parser.add_argument("--batch-size", type=int, default=BATCH_SIZE,
-                        help="Number of images sent to the network in one step.")
     parser.add_argument("--iter-size", type=int, default=ITER_SIZE,
                         help="Accumulate gradients for ITER_SIZE iterations.")
     parser.add_argument("--num-workers", type=int, default=NUM_WORKERS,
                         help="number of workers for multithread dataloading.")
-    parser.add_argument("--data-dir", type=str, default=DATA_DIRECTORY,
-                        help="Path to the directory containing the source dataset.")
-    parser.add_argument("--data-list", type=str, default=DATA_LIST_PATH,
-                        help="Path to the file listing the images in the source dataset.")
     parser.add_argument("--ignore-label", type=int, default=IGNORE_LABEL,
                         help="The index of the label to ignore during the training.")
-    parser.add_argument("--input-size", type=str, default=INPUT_SIZE,
-                        help="Comma-separated string with height and width of source images.")
-    parser.add_argument("--data-dir-target", type=str, default=DATA_DIRECTORY_TARGET,
-                        help="Path to the directory containing the target dataset.")
-    parser.add_argument("--data-list-target", type=str, default=DATA_LIST_PATH_TARGET,
-                        help="Path to the file listing the images in the target dataset.")
-    parser.add_argument("--input-size-target", type=str, default=INPUT_SIZE_TARGET,
-                        help="Comma-separated string with height and width of target images.")
     parser.add_argument("--is-training", action="store_true",
                         help="Whether to updates the running means and variances during the training.")
-    parser.add_argument("--learning-rate", type=float, default=LEARNING_RATE,
-                        help="Base learning rate for training with polynomial decay.")
     parser.add_argument("--learning-rate-D", type=float, default=LEARNING_RATE_D,
                         help="Base learning rate for discriminator.")
     parser.add_argument("--lambda-seg", type=float, default=LAMBDA_SEG,
@@ -106,8 +128,7 @@ def get_arguments():
                         help="Whether to not restore last (FC) layers.")
     parser.add_argument("--num-classes", type=int, default=NUM_CLASSES,
                         help="Number of classes to predict (including background).")
-    parser.add_argument("--num-steps", type=int, default=NUM_STEPS,
-                        help="Number of training steps.")
+
     parser.add_argument("--num-steps-stop", type=int, default=NUM_STEPS_STOP,
                         help="Number of training steps for early stopping.")
     parser.add_argument("--power", type=float, default=POWER,
@@ -118,18 +139,16 @@ def get_arguments():
                         help="Whether to randomly scale the inputs during the training.")
     parser.add_argument("--random-seed", type=int, default=RANDOM_SEED,
                         help="Random seed to have reproducible results.")
-    parser.add_argument("--restore-from", type=str, default=RESTORE_FROM,
-                        help="Where restore model parameters from.")
+
+    parser.add_argument("--mode", type=str,default='pretrain')
     parser.add_argument("--save-num-images", type=int, default=SAVE_NUM_IMAGES,
                         help="How many images to save.")
-    parser.add_argument("--save-pred-every", type=int, default=SAVE_PRED_EVERY,
-                        help="Save summaries and checkpoint every often.")
-    parser.add_argument("--snapshot-dir", type=str, default=SNAPSHOT_DIR,
-                        help="Where to save snapshots of the model.")
     parser.add_argument("--weight-decay", type=float, default=WEIGHT_DECAY,
                         help="Regularisation parameter for L2-loss.")
     parser.add_argument("--gpu", type=int, default=0,
                         help="choose gpu device.")
+    parser.add_argument("--source", type=int, default=0)
+    parser.add_argument("--target", type=int, default=2)
     parser.add_argument("--set", type=str, default=SET,
                         help="choose adaptation set.")
     parser.add_argument("--gan", type=str, default=GAN,
@@ -138,7 +157,7 @@ def get_arguments():
 
 
 args = get_arguments()
-
+best_sdice = -1
 
 def loss_calc(pred, label, gpu):
     """
@@ -146,8 +165,8 @@ def loss_calc(pred, label, gpu):
     """
     # out shape batch_size x channels x h x w -> batch_size x channels x h x w
     # label shape h x w x 1 x batch_size  -> batch_size x 1 x h x w
-    label = Variable(label.long()).cuda(gpu)
-    criterion = CrossEntropy2d().cuda(gpu)
+    label = Variable(label.long()).to(gpu)
+    criterion = CrossEntropy2d().to(gpu)
 
     return criterion(pred, label)
 
@@ -157,112 +176,110 @@ def lr_poly(base_lr, iter, max_iter, power):
 
 
 def adjust_learning_rate(optimizer, i_iter):
-    lr = lr_poly(args.learning_rate, i_iter, args.num_steps, args.power)
+    lr = lr_poly(config.lr, i_iter, config.num_steps, args.power)
     optimizer.param_groups[0]['lr'] = lr
     if len(optimizer.param_groups) > 1:
         optimizer.param_groups[1]['lr'] = lr * 10
 
 
 def adjust_learning_rate_D(optimizer, i_iter):
-    lr = lr_poly(args.learning_rate_D, i_iter, args.num_steps, args.power)
+    lr = lr_poly(args.learning_rate_D, i_iter, config.num_steps, args.power)
     optimizer.param_groups[0]['lr'] = lr
     if len(optimizer.param_groups) > 1:
         optimizer.param_groups[1]['lr'] = lr * 10
 
 
-def main():
-    """Create the model and start the training."""
+def after_step(num_step,val_ds,test_ds,model,interp):
+    def get_sdice(loader):
+        model.eval()
+        sdice_for_id={}
+        with torch.no_grad():
 
-    w, h = map(int, args.input_size.split(','))
-    input_size = (w, h)
+            for images,segs,ids,_ in tqdm(loader,desc='running test loader'):
+                _, output2 = model(images.to(args.gpu))
+                output = interp(output2).cpu().data.numpy()
+                output = np.asarray(np.argmax(output, axis=1), dtype=np.uint8).astype(bool)
+                segs = segs.squeeze(1).numpy().astype(bool)
+                for out1,seg1,id1 in zip(output,segs,ids):
+                    out1 = np.expand_dims(out1, 0)
+                    seg1 = np.expand_dims(seg1, 0)
+                    if id1 not in sdice_for_id:
+                        sdice_for_id[id1] = []
+                    curr_sdice = sdice(seg1,out1,test_ds.spacing_loader(id1))
+                    assert not np.any(np.isnan(curr_sdice))
+                    sdice_for_id[id1].append(curr_sdice)
+        all_sdices = [np.mean(sdices) for sdices in sdice_for_id.values()]
+        return float(np.mean(all_sdices))
+    def get_dice(ds):
+        model.eval()
+        dices = []
+        with torch.no_grad():
+            for id1,images in ds.patches_Allimages.items():
+                segs = ds.patches_Allmasks[id1]
+                images = Variable(images).to(args.gpu)
+                _, output2 = model(images)
+                output = interp(output2).cpu().data.numpy()
+                output = np.asarray(np.argmax(output, axis=1), dtype=np.uint8).astype(bool)
+                output = _connectivity_region_analysis(output)
+                dices.append(dice(segs,output))
+        return float(np.mean(dices))
 
-    w, h = map(int, args.input_size_target.split(','))
-    input_size_target = (w, h)
 
-    cudnn.enabled = True
-    gpu = args.gpu
+    global best_sdice
+    valloader = data.DataLoader(val_ds,batch_size=config.batch_size, shuffle=False, num_workers=args.num_workers)
 
-    # Create network
-    if args.model == 'DeepLab':
-        model = DeeplabMulti(num_classes=args.num_classes)
-        if args.restore_from[:4] == 'http' :
-            saved_state_dict = model_zoo.load_url(args.restore_from)
+    if num_step % config.save_pred_every == 0 and num_step!= 0:
+        if config.msm:
+            sdice1 = get_dice(val_ds)
         else:
-            saved_state_dict = torch.load(args.restore_from)
+            sdice1 = get_sdice(valloader)
+        wandb.log({'sdice/val':sdice1},step=num_step)
+        print('sdice is ',sdice1)
+        print ('taking snapshot ...')
 
-        new_params = model.state_dict().copy()
-        for i in saved_state_dict:
-            # Scale.layer5.conv2d_list.3.weight
-            i_parts = i.split('.')
-            # print i_parts
-            if not args.num_classes == 19 or not i_parts[1] == 'layer5':
-                new_params['.'.join(i_parts[1:])] = saved_state_dict[i]
-                # print i_parts
-        model.load_state_dict(new_params)
+        if sdice1 > best_sdice:
+            best_sdice = sdice1
 
-    model.train()
-    model.cuda(args.gpu)
+            torch.save(model.state_dict(), config.exp_dir / f'best_model.pth')
+        torch.save(model.state_dict(), config.exp_dir / f'model.pth')
+    if num_step  == config.num_steps - 1:
+        testloader = data.DataLoader(test_ds,batch_size=config.batch_size, shuffle=False, num_workers=args.num_workers)
+        if config.msm:
+            sdice_test = get_dice(test_ds)
+        else:
+            sdice_test = get_sdice(testloader)
+        model.load_state_dict(torch.load(config.exp_dir / f'best_model.pth',map_location='cpu'))
+        if config.msm:
+            sdice_test_best = get_dice(test_ds)
+        else:
+            sdice_test_best = get_sdice(testloader)
+        scores = {'sdice/test':sdice_test,'sdice/test_best':sdice_test_best}
+        wandb.log(scores,step=num_step)
+        json.dump(scores,open(config.exp_dir/'scores.json','w'))
 
-    cudnn.benchmark = True
-
+def train_their(model,optimizer,trainloader,targetloader,interp,interp_target,val_ds,test_ds):
+    trainloader_iter = iter(trainloader)
+    targetloader_iter = iter(targetloader)
+    bce_loss = torch.nn.BCEWithLogitsLoss()
     # init D
     model_D1 = FCDiscriminator(num_classes=args.num_classes)
     model_D2 = FCDiscriminator(num_classes=args.num_classes)
 
     model_D1.train()
-    model_D1.cuda(args.gpu)
+    model_D1.to(args.gpu)
 
     model_D2.train()
-    model_D2.cuda(args.gpu)
-
-    if not os.path.exists(args.snapshot_dir):
-        os.makedirs(args.snapshot_dir)
-
-    trainloader = data.DataLoader(
-        GTA5DataSet(args.data_dir, args.data_list, max_iters=args.num_steps * args.iter_size * args.batch_size,
-                    crop_size=input_size,
-                    scale=args.random_scale, mirror=args.random_mirror, mean=IMG_MEAN),
-        batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, pin_memory=True)
-
-    trainloader_iter = enumerate(trainloader)
-
-    targetloader = data.DataLoader(cityscapesDataSet(args.data_dir_target, args.data_list_target,
-                                                     max_iters=args.num_steps * args.iter_size * args.batch_size,
-                                                     crop_size=input_size_target,
-                                                     scale=False, mirror=args.random_mirror, mean=IMG_MEAN,
-                                                     set=args.set),
-                                   batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers,
-                                   pin_memory=True)
-
-
-    targetloader_iter = enumerate(targetloader)
-
-    # implement model.optim_parameters(args) to handle different models' lr setting
-
-    optimizer = optim.SGD(model.optim_parameters(args),
-                          lr=args.learning_rate, momentum=args.momentum, weight_decay=args.weight_decay)
-    optimizer.zero_grad()
-
+    model_D2.to(args.gpu)
     optimizer_D1 = optim.Adam(model_D1.parameters(), lr=args.learning_rate_D, betas=(0.9, 0.99))
     optimizer_D1.zero_grad()
 
     optimizer_D2 = optim.Adam(model_D2.parameters(), lr=args.learning_rate_D, betas=(0.9, 0.99))
     optimizer_D2.zero_grad()
-
-    if args.gan == 'Vanilla':
-        bce_loss = torch.nn.BCEWithLogitsLoss()
-    elif args.gan == 'LS':
-        bce_loss = torch.nn.MSELoss()
-
-    interp = nn.Upsample(size=(input_size[1], input_size[0]), mode='bilinear')
-    interp_target = nn.Upsample(size=(input_size_target[1], input_size_target[0]), mode='bilinear')
-
     # labels for adversarial training
     source_label = 0
     target_label = 1
-
-    for i_iter in range(args.num_steps):
-
+    for i_iter in range(config.num_steps):
+        model.train()
         loss_seg_value1 = 0
         loss_adv_target_value1 = 0
         loss_D_value1 = 0
@@ -291,30 +308,38 @@ def main():
                 param.requires_grad = False
 
             # train with source
+            try:
+                batch = trainloader_iter.next()
+            except StopIteration:
+                trainloader_iter = iter(trainloader)
+                batch = trainloader_iter.next()
 
-            _, batch = trainloader_iter.next()
-            images, labels, _, _ = batch
-            images = Variable(images).cuda(args.gpu)
+            images, labels = batch
+            images = Variable(images).to(args.gpu)
 
             pred1, pred2 = model(images)
             pred1 = interp(pred1)
             pred2 = interp(pred2)
 
-            loss_seg1 = loss_calc(pred1, labels, args.gpu)
+            # loss_seg1 = loss_calc(pred1, labels, args.gpu)
             loss_seg2 = loss_calc(pred2, labels, args.gpu)
-            loss = loss_seg2 + args.lambda_seg * loss_seg1
+            loss = loss_seg2
 
             # proper normalization
             loss = loss / args.iter_size
             loss.backward()
-            loss_seg_value1 += loss_seg1.data.cpu().numpy()[0] / args.iter_size
-            loss_seg_value2 += loss_seg2.data.cpu().numpy()[0] / args.iter_size
+            # loss_seg_value1 += loss_seg1.data.cpu().numpy() / args.iter_size
+            loss_seg_value2 += loss_seg2.data.cpu().numpy() / args.iter_size
 
             # train with target
+            try:
+                batch = targetloader_iter.next()
+            except StopIteration:
+                targetloader_iter = iter(targetloader)
+                batch = targetloader_iter.next()
 
-            _, batch = targetloader_iter.next()
-            images, _, _ = batch
-            images = Variable(images).cuda(args.gpu)
+            images, _ = batch
+            images = Variable(images).to(args.gpu)
 
             pred_target1, pred_target2 = model(images)
             pred_target1 = interp_target(pred_target1)
@@ -324,18 +349,18 @@ def main():
             D_out2 = model_D2(F.softmax(pred_target2))
 
             loss_adv_target1 = bce_loss(D_out1,
-                                       Variable(torch.FloatTensor(D_out1.data.size()).fill_(source_label)).cuda(
-                                           args.gpu))
+                                        Variable(torch.FloatTensor(D_out1.data.size()).fill_(source_label)).to(
+                                            args.gpu))
 
             loss_adv_target2 = bce_loss(D_out2,
-                                        Variable(torch.FloatTensor(D_out2.data.size()).fill_(source_label)).cuda(
+                                        Variable(torch.FloatTensor(D_out2.data.size()).fill_(source_label)).to(
                                             args.gpu))
 
             loss = args.lambda_adv_target1 * loss_adv_target1 + args.lambda_adv_target2 * loss_adv_target2
             loss = loss / args.iter_size
             loss.backward()
-            loss_adv_target_value1 += loss_adv_target1.data.cpu().numpy()[0] / args.iter_size
-            loss_adv_target_value2 += loss_adv_target2.data.cpu().numpy()[0] / args.iter_size
+            loss_adv_target_value1 += loss_adv_target1.data.cpu().numpy() / args.iter_size
+            loss_adv_target_value2 += loss_adv_target2.data.cpu().numpy() / args.iter_size
 
             # train D
 
@@ -354,10 +379,10 @@ def main():
             D_out2 = model_D2(F.softmax(pred2))
 
             loss_D1 = bce_loss(D_out1,
-                              Variable(torch.FloatTensor(D_out1.data.size()).fill_(source_label)).cuda(args.gpu))
+                               Variable(torch.FloatTensor(D_out1.data.size()).fill_(source_label)).to(args.gpu))
 
             loss_D2 = bce_loss(D_out2,
-                               Variable(torch.FloatTensor(D_out2.data.size()).fill_(source_label)).cuda(args.gpu))
+                               Variable(torch.FloatTensor(D_out2.data.size()).fill_(source_label)).to(args.gpu))
 
             loss_D1 = loss_D1 / args.iter_size / 2
             loss_D2 = loss_D2 / args.iter_size / 2
@@ -365,8 +390,8 @@ def main():
             loss_D1.backward()
             loss_D2.backward()
 
-            loss_D_value1 += loss_D1.data.cpu().numpy()[0]
-            loss_D_value2 += loss_D2.data.cpu().numpy()[0]
+            loss_D_value1 += loss_D1.data.cpu().numpy()
+            loss_D_value2 += loss_D2.data.cpu().numpy()
 
             # train with target
             pred_target1 = pred_target1.detach()
@@ -376,10 +401,10 @@ def main():
             D_out2 = model_D2(F.softmax(pred_target2))
 
             loss_D1 = bce_loss(D_out1,
-                              Variable(torch.FloatTensor(D_out1.data.size()).fill_(target_label)).cuda(args.gpu))
+                               Variable(torch.FloatTensor(D_out1.data.size()).fill_(target_label)).to(args.gpu))
 
             loss_D2 = bce_loss(D_out2,
-                               Variable(torch.FloatTensor(D_out2.data.size()).fill_(target_label)).cuda(args.gpu))
+                               Variable(torch.FloatTensor(D_out2.data.size()).fill_(target_label)).to(args.gpu))
 
             loss_D1 = loss_D1 / args.iter_size / 2
             loss_D2 = loss_D2 / args.iter_size / 2
@@ -387,30 +412,373 @@ def main():
             loss_D1.backward()
             loss_D2.backward()
 
-            loss_D_value1 += loss_D1.data.cpu().numpy()[0]
-            loss_D_value2 += loss_D2.data.cpu().numpy()[0]
+            loss_D_value1 += loss_D1.data.cpu().numpy()
+            loss_D_value2 += loss_D2.data.cpu().numpy()
 
         optimizer.step()
         optimizer_D1.step()
         optimizer_D2.step()
 
-        print('exp = {}'.format(args.snapshot_dir))
         print(
-        'iter = {0:8d}/{1:8d}, loss_seg1 = {2:.3f} loss_seg2 = {3:.3f} loss_adv1 = {4:.3f}, loss_adv2 = {5:.3f} loss_D1 = {6:.3f} loss_D2 = {7:.3f}'.format(
-            i_iter, args.num_steps, loss_seg_value1, loss_seg_value2, loss_adv_target_value1, loss_adv_target_value2, loss_D_value1, loss_D_value2))
+            'iter = {0:8d}/{1:8d}, loss_seg1 = {2:.3f} loss_seg2 = {3:.3f} loss_adv1 = {4:.3f}, loss_adv2 = {5:.3f} loss_D1 = {6:.3f} loss_D2 = {7:.3f}'.format(
+                i_iter, config.num_steps, loss_seg_value1, loss_seg_value2, loss_adv_target_value1, loss_adv_target_value2, loss_D_value1, loss_D_value2))
+        after_step(i_iter,interp=interp,model =model,val_ds=val_ds,test_ds=test_ds)
+def train_pretrain(model,optimizer,trainloader,interp):
+    if config.msm:
+        val_ds = MultiSiteMri(load(f'{config.base_splits_path}/site_{args.source}t/val_ids.json'),yield_id=True)
+        test_ds = MultiSiteMri(load(f'{config.base_splits_path}/site_{args.source}t/test_ids.json'),yield_id=True)
+    else:
+        val_ds = CC359Ds(load(f'{config.base_splits_path}/site_{args.source}/val_ids.json'),yield_id=True,slicing_interval=1)
+        test_ds = CC359Ds(load(f'{config.base_splits_path}/site_{args.source}/test_ids.json'),yield_id=True,slicing_interval=1)
+    trainloader_iter = iter(trainloader)
+    for i_iter in range(config.num_steps):
+        model.train()
+        loss_seg_value = 0
+        optimizer.zero_grad()
+        adjust_learning_rate(optimizer, i_iter)
 
-        if i_iter >= args.num_steps_stop - 1:
-            print 'save model ...'
-            torch.save(model.state_dict(), osp.join(args.snapshot_dir, 'GTA5_' + str(args.num_steps_stop) + '.pth'))
-            torch.save(model_D1.state_dict(), osp.join(args.snapshot_dir, 'GTA5_' + str(args.num_steps_stop) + '_D1.pth'))
-            torch.save(model_D2.state_dict(), osp.join(args.snapshot_dir, 'GTA5_' + str(args.num_steps_stop) + '_D2.pth'))
-            break
+        for sub_i in range(args.iter_size):
+            # train with source
+            try:
+                batch = trainloader_iter.next()
+            except StopIteration:
+                trainloader_iter = iter(trainloader)
+                batch = trainloader_iter.next()
 
-        if i_iter % args.save_pred_every == 0 and i_iter != 0:
-            print 'taking snapshot ...'
-            torch.save(model.state_dict(), osp.join(args.snapshot_dir, 'GTA5_' + str(i_iter) + '.pth'))
-            torch.save(model_D1.state_dict(), osp.join(args.snapshot_dir, 'GTA5_' + str(i_iter) + '_D1.pth'))
-            torch.save(model_D2.state_dict(), osp.join(args.snapshot_dir, 'GTA5_' + str(i_iter) + '_D2.pth'))
+            images, labels = batch
+            images = Variable(images).to(args.gpu)
+
+            _, pred = model(images)
+            pred = interp(pred)
+            loss_seg = loss_calc(pred, labels, args.gpu)
+            loss = loss_seg
+            # proper normalization
+            loss = loss / args.iter_size
+            loss.backward()
+            loss_seg_value += loss_seg.data.cpu().numpy() / args.iter_size
+
+        optimizer.step()
+
+
+        print(
+            'iter = {0:8d}/{1:8d}, loss_seg1 = {2:.3f}'.format(
+                i_iter, config.num_steps, loss_seg_value))
+        after_step(i_iter,interp=interp,model =model,val_ds=val_ds,test_ds=test_ds)
+
+def get_best_match_aux(distss):
+    n_clusters = len(distss)
+    print('n_clusterss',n_clusters)
+    res = linear_sum_assignment(distss)[1].tolist()
+    targets = [None] *n_clusters
+    for x,y in enumerate(res):
+        targets[y] = x
+    return targets
+
+
+def get_best_match(sc, tc):
+    dists = np.full((sc.shape[0],tc.shape[0]),fill_value=np.inf)
+    for i in range(sc.shape[0]):
+        for j in range(tc.shape[0]):
+            dists[i][j] = np.mean((sc[i]-tc[j])**2)
+    best_match = get_best_match_aux(dists.copy())
+
+    return best_match
+
+def train_clustering(model,optimizer,trainloader,targetloader,interp,val_ds,test_ds):
+    freeze_model(model,include_layers=['layer3','layer4','layer5','layer6'])
+    trainloader.dataset.yield_id = True
+    targetloader.dataset.yield_id = True
+    trainloader_iter = iter(trainloader)
+    targetloader_iter = iter(targetloader)
+
+
+    dist_loss_lambda = 0.1
+    n_clusters = config.n_clusters
+    slice_to_cluster = None
+    source_clusters = None
+    target_clusters = None
+    best_matchs = None
+    best_matchs_indexes = None
+    accumulate_for_loss = None
+    if config.use_accumulate_for_loss:
+        accumulate_for_loss = []
+        for _ in range(n_clusters):
+            accumulate_for_loss.append([])
+    slice_to_feature_source = {}
+    slice_to_feature_target = {}
+
+    epoch_seg_loss = []
+    epoch_dist_loss = []
+    optimizer.zero_grad()
+    for i_iter in tqdm(range(config.num_steps)):
+        model.get_bottleneck = True
+        model.train()
+        if i_iter % config.epoch_every == 0 and i_iter != 0:
+            epoch_seg_loss = []
+            epoch_dist_loss = []
+            source_clusters = []
+            target_clusters = []
+            if config.use_accumulate_for_loss:
+                accumulate_for_loss = []
+                for _ in range(n_clusters):
+                    accumulate_for_loss.append([])
+            for i in range(n_clusters):
+                source_clusters.append([])
+                target_clusters.append([])
+            p = PCA(n_components=20,random_state=42)
+            t = TSNE(n_components=2,learning_rate='auto',init='pca',random_state=42)
+            points = np.stack(list(slice_to_feature_source.values()) + list(slice_to_feature_target.values()))
+            points = points.reshape(points.shape[0],-1)
+            print('doing tsne')
+            points = p.fit_transform(points)
+            points = t.fit_transform(points)
+            source_points,target_points = points[:len(slice_to_feature_source)],points[len(slice_to_feature_source):]
+            # source_points,target_points = points[:max(len(slice_to_feature_source),n_clusters)],points[-max(len(slice_to_feature_target),n_clusters):]
+            k = KMeans(n_clusters=n_clusters,random_state=42)
+            k.fit(points)
+            k1 = KMeans(n_clusters=n_clusters,random_state=42,init=k.cluster_centers_)
+            print('doing kmean 1')
+            sc = k1.fit_predict(source_points)
+            k2 = KMeans(n_clusters=n_clusters,random_state=42,init=k.cluster_centers_)
+            print('doing kmean 2')
+            tc = k2.fit_predict(target_points)
+            print('getting best match')
+            best_matchs_indexes=get_best_match(k1.cluster_centers_,k2.cluster_centers_)
+            slice_to_cluster = {}
+            items = list(slice_to_feature_source.items())
+            for i in range(len(slice_to_feature_source)):
+                source_clusters[sc[i]].append(items[i][1])
+                slice_to_cluster[items[i][0]] = sc[i]
+            items = list(slice_to_feature_target.items())
+            for i in range(len(slice_to_feature_target)):
+                slice_to_cluster[items[i][0]] = tc[i]
+            for i in range(len(source_clusters)):
+                source_clusters[i] = np.mean(source_clusters[i],axis=0)
+            best_matchs = []
+            for i in range(len(best_matchs_indexes)):
+                best_matchs.append(torch.tensor(source_clusters[best_matchs_indexes[i]]))
+
+            cm = plt.get_cmap('gist_rainbow')
+            cNorm  = mplcolors.Normalize(vmin=0, vmax=n_clusters-1)
+            scalarMap = mplcm.ScalarMappable(norm=cNorm, cmap=cm)
+            colors = []
+            for i in range(n_clusters):
+                colors.append(scalarMap.to_rgba(i))
+
+            im_path_source =str(config.exp_dir /  f'{i_iter}_source.png')
+            fig = plt.figure()
+            ax = fig.add_subplot()
+            curr_colors = []
+            curr_points_x = []
+            curr_points_y = []
+            for i, slc_name in enumerate(slice_to_feature_source.keys()):
+                curr_points_x.append(source_points[i][0])
+                curr_points_y.append(source_points[i][1])
+                curr_colors.append(colors[slice_to_cluster[slc_name]])
+            ax.scatter(curr_points_x,curr_points_y,marker = '.',c=curr_colors)
+            plt.savefig(im_path_source)
+            plt.cla()
+            plt.clf()
+            im_path_target = str(config.exp_dir /  f'{i_iter}_target.png')
+            fig = plt.figure()
+            ax = fig.add_subplot()
+            curr_colors = []
+            curr_points_x = []
+            curr_points_y = []
+            for i, slc_name in enumerate(slice_to_feature_target.keys()):
+                curr_points_x.append(target_points[i][0])
+                curr_points_y.append(target_points[i][1])
+                curr_colors.append(colors[best_matchs_indexes[slice_to_cluster[slc_name]]])
+            ax.scatter(curr_points_x,curr_points_y,marker = '.',c=curr_colors)
+            plt.savefig(im_path_target)
+            plt.cla()
+            plt.clf()
+            im_path_clusters = str(config.exp_dir /  f'{i_iter}_clusters.png')
+            fig = plt.figure()
+            ax = fig.add_subplot()
+            for i,(p,marker) in enumerate([(k1.cluster_centers_,'.'),(k2.cluster_centers_,'^')]):
+                if i ==0:
+                    ax.scatter(p[:,0],p[:,1],marker = marker,c=colors[:len(p)])
+                else:
+                    ax.scatter(p[:,0],p[:,1],marker = marker,c=[colors[best_matchs_indexes[i]] for i in range(len(p))])
+            plt.savefig(im_path_clusters)
+            plt.cla()
+            plt.clf()
+            slice_to_feature_source = {}
+            slice_to_feature_target = {}
+            log_log = {f'figs/source': wandb.Image(im_path_source),f'figs/target': wandb.Image(im_path_target),f'figs/cluster': wandb.Image(im_path_clusters)}
+            wandb.log(log_log,step=i_iter)
+        loss_seg_value = 0
+
+        adjust_learning_rate(optimizer, i_iter)
+        for sub_i in range(args.iter_size):
+            try:
+                batch = trainloader_iter.next()
+            except StopIteration:
+                trainloader_iter = iter(trainloader)
+                batch = trainloader_iter.next()
+
+            images, labels,ids,slice_nums = batch
+            images = Variable(images).to(args.gpu)
+
+            _, pred,features = model(images)
+            features = features.mean(1).detach().cpu().numpy()
+            for id1,slc_num,feature in zip(ids,slice_nums,features):
+                slice_to_feature_source[f'{id1}_{slc_num}'] = feature
+            pred = interp(pred)
+            loss_seg = loss_calc(pred, labels, args.gpu)
+            loss = loss_seg
+            # proper normalization
+            loss = loss / args.iter_size
+
+            loss_seg_value += loss_seg.data.cpu().numpy() / args.iter_size
+            try:
+                batch = targetloader_iter.next()
+            except StopIteration:
+                targetloader_iter = iter(targetloader)
+                batch = targetloader_iter.next()
+            images, labels,ids,slice_nums = batch
+            images = Variable(images).to(args.gpu)
+
+            _, __,features = model(images)
+            features = features.mean(1)
+            dist_loss = torch.tensor(0.0,device=args.gpu)
+            for id1,slc_num,feature in zip(ids,slice_nums,features):
+                slice_to_feature_target[f'{id1}_{slc_num}'] = feature.detach().cpu().numpy()
+                if best_matchs is not None and  f'{id1}_{slc_num}' in slice_to_cluster:
+                    if config.use_accumulate_for_loss:
+                        accumulate_for_loss[slice_to_cluster[f'{id1}_{slc_num}']].append(feature)
+                    else:
+                        dist_loss+= torch.mean(torch.abs(feature - best_matchs[slice_to_cluster[f'{id1}_{slc_num}']].to(args.gpu)))
+            if accumulate_for_loss is not None:
+                use_dist_loss = False
+                lens1 = [len(x) for x in accumulate_for_loss]
+                if np.sum(lens1) > 25:
+                    use_dist_loss = True
+                if use_dist_loss:
+                    for i,features in enumerate(accumulate_for_loss):
+                        if len(features) > 0:
+                            features = torch.mean(torch.stack(features),dim=0)
+                            dist_loss+= torch.mean(torch.abs(features - best_matchs[i].to(args.gpu)))
+                            accumulate_for_loss[i] = []
+            dist_loss*= dist_loss_lambda
+            epoch_dist_loss.append(float(dist_loss))
+            epoch_seg_loss.append(float(loss))
+            losses_dict = {'seg_loss': loss,'dist_loss':dist_loss,'total':loss+dist_loss}
+            if accumulate_for_loss is None:
+                losses_dict['total'].backward()
+                optimizer.step()
+                optimizer.zero_grad()
+            else:
+                if use_dist_loss:
+                    losses_dict['total'].backward()
+                    optimizer.step()
+                    optimizer.zero_grad()
+                elif best_matchs is None:
+                    losses_dict['seg_loss'].backward()
+                    optimizer.step()
+                    optimizer.zero_grad()
+                else:
+                    losses_dict['seg_loss'].backward(retain_graph=True)
+            wandb.log({'seg_loss':float(np.mean(epoch_seg_loss)),'dist_loss':float(np.mean(epoch_dist_loss))},step=i_iter)
+
+
+
+        model.get_bottleneck = False
+        after_step(i_iter,val_ds,test_ds,model,interp)
+def main():
+    """Create the model and start the training."""
+
+    input_size = config.input_size
+    input_size_target = config.input_size
+
+    cudnn.enabled = True
+
+
+    # Create network
+    model = DeeplabMulti(num_classes=args.num_classes,n_channels=config.n_channels)
+
+    if args.mode != 'pretrain':
+        config.exp_dir = Path(config.base_res_path) /f'source_{args.source}_target_{args.target}' / args.mode
+
+        ckpt_path = Path(config.base_res_path) / f'source_{args.source}' / 'pretrain' / 'best_model.pth'
+        model.load_state_dict(torch.load(ckpt_path,map_location='cpu'))
+        optimizer = optim.SGD(model.parameters(),
+                              lr=config.lr, momentum=args.momentum, weight_decay=args.weight_decay)
+    else:
+        config.exp_dir = Path(config.base_res_path) /f'source_{args.source}' / args.mode
+        saved_state_dict = model_zoo.load_url('http://vllab.ucmerced.edu/ytsai/CVPR18/DeepLab_resnet_pretrained_init-f81d91e8.pth')
+        new_params = model.state_dict().copy()
+        for i in saved_state_dict:
+            # Scale.layer5.conv2d_list.3.weight
+            i_parts = i.split('.')
+            # print i_parts
+            if not args.num_classes == 19 or not i_parts[1] == 'layer5':
+                new_params['.'.join(i_parts[1:])] = saved_state_dict[i]
+                # print i_parts
+
+        nn1 = [x for x in new_params.keys() if x == 'conv1.weight' or 'layer5' in x]
+        for x in nn1:
+            new_params.pop(x)
+        model.load_state_dict(new_params,strict=False)
+        optimizer = optim.SGD(model.optim_parameters(config),
+                              lr=config.lr, momentum=args.momentum, weight_decay=args.weight_decay)
+    config.exp_dir.mkdir(parents=True,exist_ok=True)
+    json.dump(dataclasses.asdict(config),open(config.exp_dir/'config.json','w'))
+
+    model.train()
+    if not torch.cuda.is_available():
+        print('training on cpu')
+        args.gpu = 'cpu'
+
+    model.to(args.gpu)
+    random.seed(RANDOM_SEED)
+    np.random.seed(RANDOM_SEED)
+    torch.manual_seed(RANDOM_SEED)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    if config.msm:
+        assert args.source == args.target
+        source_ds = MultiSiteMri(load(f'{config.base_splits_path}/site_{args.source}t/train_ids.json'))
+        target_ds = MultiSiteMri(load(f'{config.base_splits_path}/site_{args.target}/train_ids.json'))
+        val_ds = MultiSiteMri(load(f'{config.base_splits_path}/site_{args.target}/val_ids.json'),yield_id=True)
+        test_ds = MultiSiteMri(load(f'{config.base_splits_path}/site_{args.target}/test_ids.json'),yield_id=True)
+        project = 'adaptSegNetMsm'
+    else:
+        source_ds = CC359Ds(load(f'{config.base_splits_path}/site_{args.source}/train_ids.json')[:config.data_len])
+        target_ds = CC359Ds(load(f'{config.base_splits_path}/site_{args.target}/train_ids.json')[:config.data_len])
+        val_ds = CC359Ds(load(f'{config.base_splits_path}/site_{args.target}/val_ids.json'),yield_id=True,slicing_interval=1)
+        test_ds = CC359Ds(load(f'{config.base_splits_path}/site_{args.target}/test_ids.json'),yield_id=True,slicing_interval=1)
+        project = 'adaptSegNet'
+    wandb.init(
+        project=project,
+        id=wandb.util.generate_id(),
+        name=args.mode + str(args.source) + '_' + str(args.target),
+    )
+    trainloader = data.DataLoader(source_ds,batch_size=config.batch_size, shuffle=True, num_workers=args.num_workers)
+    targetloader = data.DataLoader(target_ds, batch_size=config.batch_size, shuffle=True, num_workers=args.num_workers)
+    # implement model.optim_parameters(args) to handle different models' lr setting
+
+
+    optimizer.zero_grad()
+
+
+    interp = nn.Upsample(size=(input_size[1], input_size[0]), mode='bilinear',align_corners=True)
+    interp_target = nn.Upsample(size=(input_size_target[1], input_size_target[0]), mode='bilinear',align_corners=True)
+    if args.mode == 'pretrain':
+        train_pretrain(model,optimizer,trainloader,interp)
+    elif args.mode == 'clustering_finetune':
+        train_clustering(model,optimizer,trainloader,targetloader,interp,val_ds,test_ds)
+    else:
+        assert args.mode == 'their'
+        train_their(model,optimizer,trainloader,targetloader,interp,interp_target,val_ds,test_ds)
+
+
+
+
+
+
+
 
 
 if __name__ == '__main__':
