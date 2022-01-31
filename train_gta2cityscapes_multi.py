@@ -28,7 +28,7 @@ import matplotlib.pyplot as plt
 import random
 from dpipe.io import load
 from tqdm import tqdm
-
+from utils import get_sdice,get_dice
 from dataset.cc359_dataset import CC359Ds
 from dataset.msm_dataset import MultiSiteMri
 from model.deeplab_multi import DeeplabMulti
@@ -38,38 +38,11 @@ from dataset.gta5_dataset import GTA5DataSet
 from dataset.cityscapes_dataset import cityscapesDataSet
 from scipy import ndimage
 from configs import *
-import surface_distance.metrics as surf_dc
-def sdice(a, b, spacing, tolerance=1):
-    if np.count_nonzero(a) == 0:
-        non_zeros = np.count_nonzero(b)
-        if  non_zeros == 0:
-            return 1
-    surface_distances = surf_dc.compute_surface_distances(b, a, spacing)
-    return surf_dc.compute_surface_dice_at_tolerance(surface_distances, tolerance)
 
 
-def _connectivity_region_analysis(mask):
-    s = [[0,1,0],
-         [1,1,1],
-         [0,1,0]]
-    label_im, nb_labels = ndimage.label(mask)#, structure=s)
-
-    sizes = ndimage.sum(mask, label_im, range(nb_labels + 1))
-
-    # plt.imshow(label_im)
-    label_im[label_im != np.argmax(sizes)] = 0
-    label_im[label_im == np.argmax(sizes)] = 1
-
-    return label_im
-def dice(gt,pred):
-    g = np.zeros(gt.shape)
-    p = np.zeros(pred.shape)
-    g[gt == 1] = 1
-    p[pred == 1] = 1
-    return (2*np.sum(g*p))/(np.sum(g)+np.sum(p))
 
 if True:
-    config = DebugMsm()
+    config = MsmConfig()
 else:
     config = DebugConfig()
 IMG_MEAN = np.array((104.00698793, 116.66876762, 122.67891434), dtype=np.float32)
@@ -190,49 +163,15 @@ def adjust_learning_rate_D(optimizer, i_iter):
 
 
 def after_step(num_step,val_ds,test_ds,model,interp):
-    def get_sdice(loader):
-        model.eval()
-        sdice_for_id={}
-        with torch.no_grad():
 
-            for images,segs,ids,_ in tqdm(loader,desc='running test loader'):
-                _, output2 = model(images.to(args.gpu))
-                output = interp(output2).cpu().data.numpy()
-                output = np.asarray(np.argmax(output, axis=1), dtype=np.uint8).astype(bool)
-                segs = segs.squeeze(1).numpy().astype(bool)
-                for out1,seg1,id1 in zip(output,segs,ids):
-                    out1 = np.expand_dims(out1, 0)
-                    seg1 = np.expand_dims(seg1, 0)
-                    if id1 not in sdice_for_id:
-                        sdice_for_id[id1] = []
-                    curr_sdice = sdice(seg1,out1,test_ds.spacing_loader(id1))
-                    assert not np.any(np.isnan(curr_sdice))
-                    sdice_for_id[id1].append(curr_sdice)
-        all_sdices = [np.mean(sdices) for sdices in sdice_for_id.values()]
-        return float(np.mean(all_sdices))
-    def get_dice(ds):
-        model.eval()
-        dices = []
-        with torch.no_grad():
-            for id1,images in tqdm(ds.patches_Allimages.items(),desc='running val or test loader'):
-                segs = ds.patches_Allmasks[id1]
-                images = Variable(torch.tensor(images)).to(args.gpu)
-                _, output2 = model(images)
-                output = interp(output2).cpu().data.numpy()
-                output = np.asarray(np.argmax(output, axis=1), dtype=np.uint8).astype(bool)
-                output = _connectivity_region_analysis(output)
-                dices.append(dice(segs,output))
-        return float(np.mean(dices))
 
     metric = 'dice' if config.msm else 'sdice'
     global best_sdice
-    valloader = data.DataLoader(val_ds,batch_size=config.batch_size, shuffle=False, num_workers=args.num_workers)
-
     if num_step % config.save_pred_every == 0 and num_step!= 0:
         if config.msm:
-            sdice1 = get_dice(val_ds)
+            sdice1 = get_dice(model,val_ds,args.gpu,config,interp)
         else:
-            sdice1 = get_sdice(valloader)
+            sdice1 =get_sdice(model,val_ds,args.gpu,config,interp)
         wandb.log({f'{metric}/val':sdice1},step=num_step)
         print(f'{metric} is ',sdice1)
         print ('taking snapshot ...')
@@ -243,16 +182,15 @@ def after_step(num_step,val_ds,test_ds,model,interp):
             torch.save(model.state_dict(), config.exp_dir / f'best_model.pth')
         torch.save(model.state_dict(), config.exp_dir / f'model.pth')
     if num_step  == config.num_steps - 1:
-        testloader = data.DataLoader(test_ds,batch_size=config.batch_size, shuffle=False, num_workers=args.num_workers)
         if config.msm:
-            sdice_test = get_dice(test_ds)
+            sdice_test = get_dice(model,test_ds,args.gpu,config,interp)
         else:
-            sdice_test = get_sdice(testloader)
+            sdice_test = get_sdice(model,test_ds,args.gpu,config,interp)
         model.load_state_dict(torch.load(config.exp_dir / f'best_model.pth',map_location='cpu'))
         if config.msm:
-            sdice_test_best = get_dice(test_ds)
+            sdice_test_best = get_dice(model,test_ds,args.gpu,config,interp)
         else:
-            sdice_test_best = get_sdice(testloader)
+            sdice_test_best =get_sdice(model,test_ds,args.gpu,config,interp)
         scores = {f'{metric}/test':sdice_test,f'{metric}/test_best':sdice_test_best}
         wandb.log(scores,step=num_step)
         json.dump(scores,open(config.exp_dir/'scores.json','w'))
@@ -490,8 +428,6 @@ def train_clustering(model,optimizer,trainloader,targetloader,interp,val_ds,test
     targetloader.dataset.yield_id = True
     trainloader_iter = iter(trainloader)
     targetloader_iter = iter(targetloader)
-
-
     dist_loss_lambda = 0.1
     n_clusters = config.n_clusters
     slice_to_cluster = None
@@ -506,7 +442,7 @@ def train_clustering(model,optimizer,trainloader,targetloader,interp,val_ds,test
             accumulate_for_loss.append([])
     slice_to_feature_source = {}
     slice_to_feature_target = {}
-
+    id_to_num_slices = load(config.id_to_num_slices)
     epoch_seg_loss = []
     epoch_dist_loss = []
     optimizer.zero_grad()
@@ -527,10 +463,25 @@ def train_clustering(model,optimizer,trainloader,targetloader,interp,val_ds,test
                 target_clusters.append([])
             p = PCA(n_components=20,random_state=42)
             t = TSNE(n_components=2,learning_rate='auto',init='pca',random_state=42)
-            points = np.stack(list(slice_to_feature_source.values()) + list(slice_to_feature_target.values()))
+            points = []
+            slices = []
+            for id_slc,feat in slice_to_feature_source.items():
+                points.append(feat)
+                id1, slc_num = id_slc.split('_')
+                slc_num = int(slc_num) / id_to_num_slices[id1]
+                slices.append(slc_num)
+            for id_slc,feat in slice_to_feature_target.items():
+                points.append(feat)
+                id1, slc_num = id_slc.split('_')
+                slc_num = int(slc_num)/ id_to_num_slices[id1]
+                slices.append(slc_num)
+            points = np.array(points)
             points = points.reshape(points.shape[0],-1)
             print('doing tsne')
             points = p.fit_transform(points)
+            if config.use_slice_num:
+                slices = np.expand_dims(np.array(slices),axis=1)
+                points = np.concatenate([points,slices],axis=1)
             points = t.fit_transform(points)
             source_points,target_points = points[:len(slice_to_feature_source)],points[len(slice_to_feature_source):]
             # source_points,target_points = points[:max(len(slice_to_feature_source),n_clusters)],points[-max(len(slice_to_feature_target),n_clusters):]
@@ -772,11 +723,6 @@ def main():
     else:
         assert args.mode == 'their'
         train_their(model,optimizer,trainloader,targetloader,interp,interp_target,val_ds,test_ds)
-
-
-
-
-
 
 
 
