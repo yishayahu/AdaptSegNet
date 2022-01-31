@@ -214,9 +214,9 @@ def after_step(num_step,val_ds,test_ds,model,interp):
         model.eval()
         dices = []
         with torch.no_grad():
-            for id1,images in ds.patches_Allimages.items():
+            for id1,images in tqdm(ds.patches_Allimages.items(),desc='running val or test loader'):
                 segs = ds.patches_Allmasks[id1]
-                images = Variable(images).to(args.gpu)
+                images = Variable(torch.tensor(images)).to(args.gpu)
                 _, output2 = model(images)
                 output = interp(output2).cpu().data.numpy()
                 output = np.asarray(np.argmax(output, axis=1), dtype=np.uint8).astype(bool)
@@ -224,7 +224,7 @@ def after_step(num_step,val_ds,test_ds,model,interp):
                 dices.append(dice(segs,output))
         return float(np.mean(dices))
 
-
+    metric = 'dice' if config.msm else 'sdice'
     global best_sdice
     valloader = data.DataLoader(val_ds,batch_size=config.batch_size, shuffle=False, num_workers=args.num_workers)
 
@@ -233,8 +233,8 @@ def after_step(num_step,val_ds,test_ds,model,interp):
             sdice1 = get_dice(val_ds)
         else:
             sdice1 = get_sdice(valloader)
-        wandb.log({'sdice/val':sdice1},step=num_step)
-        print('sdice is ',sdice1)
+        wandb.log({f'{metric}/val':sdice1},step=num_step)
+        print(f'{metric} is ',sdice1)
         print ('taking snapshot ...')
 
         if sdice1 > best_sdice:
@@ -253,7 +253,7 @@ def after_step(num_step,val_ds,test_ds,model,interp):
             sdice_test_best = get_dice(test_ds)
         else:
             sdice_test_best = get_sdice(testloader)
-        scores = {'sdice/test':sdice_test,'sdice/test_best':sdice_test_best}
+        scores = {f'{metric}/test':sdice_test,f'{metric}/test_best':sdice_test_best}
         wandb.log(scores,step=num_step)
         json.dump(scores,open(config.exp_dir/'scores.json','w'))
 
