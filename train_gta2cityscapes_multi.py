@@ -28,15 +28,13 @@ import matplotlib.pyplot as plt
 import random
 from dpipe.io import load
 from tqdm import tqdm
-from utils import get_sdice,get_dice
+from metric_utils import get_sdice,get_dice
 from dataset.cc359_dataset import CC359Ds
 from dataset.msm_dataset import MultiSiteMri
 from model.deeplab_multi import DeeplabMulti
 from model.discriminator import FCDiscriminator
 from utils.loss import CrossEntropy2d, freeze_model
-from dataset.gta5_dataset import GTA5DataSet
-from dataset.cityscapes_dataset import cityscapesDataSet
-from scipy import ndimage
+
 from configs import *
 
 
@@ -101,7 +99,6 @@ def get_arguments():
                         help="Whether to not restore last (FC) layers.")
     parser.add_argument("--num-classes", type=int, default=NUM_CLASSES,
                         help="Number of classes to predict (including background).")
-
     parser.add_argument("--num-steps-stop", type=int, default=NUM_STEPS_STOP,
                         help="Number of training steps for early stopping.")
     parser.add_argument("--power", type=float, default=POWER,
@@ -112,7 +109,6 @@ def get_arguments():
                         help="Whether to randomly scale the inputs during the training.")
     parser.add_argument("--random-seed", type=int, default=RANDOM_SEED,
                         help="Random seed to have reproducible results.")
-
     parser.add_argument("--mode", type=str,default='pretrain')
     parser.add_argument("--save-num-images", type=int, default=SAVE_NUM_IMAGES,
                         help="How many images to save.")

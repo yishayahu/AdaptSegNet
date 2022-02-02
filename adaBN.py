@@ -12,8 +12,7 @@ from dpipe.io import load
 from configs import *
 from tqdm import tqdm
 
-from utils import get_dice,get_sdice
-
+from metric_utils import get_dice,get_sdice
 
 
 from dataset.cc359_dataset import CC359Ds
@@ -33,37 +32,41 @@ def loss_calc(pred, label, gpu):
 
     return criterion(pred, label)
 
-def run_adaBN(source, target, device, metric):
+def run_adaBN(source, target, device):
 
     ckpt_path = Path(config.base_res_path) / f'source_{source}' / 'pretrain' / 'best_model.pth'
     model = DeeplabMulti(num_classes=2,n_channels=config.n_channels)
     model.load_state_dict(torch.load(ckpt_path,map_location='cpu'))
+
     for m in model.modules():
         if isinstance(m, nn.BatchNorm2d):
             m.reset_running_stats()
-
+    model.to(device)
     if config.msm:
         target_ds = MultiSiteMri(load(f'{config.base_splits_path}/site_{target}/train_ids.json'))
         test_ds = MultiSiteMri(load(f'{config.base_splits_path}/site_{target}/test_ids.json'))
+        epochs = 10
     else:
         target_ds = CC359Ds(load(f'{config.base_splits_path}/site_{target}/train_ids.json'))
-        test_ds = CC359Ds(load(f'{config.base_splits_path}/site_{target}/test_ids.json'),slicing_interval=1)
+        test_ds = CC359Ds(load(f'{config.base_splits_path}/site_{target}/test_ids.json'),slicing_interval=1,yield_id=True)
+        epochs = 1
     targetloader = data.DataLoader(target_ds, batch_size=config.batch_size, shuffle=True)
     model.train()
     interp = nn.Upsample(size=(config.input_size[1], config.input_size[0]), mode='bilinear',align_corners=True)
-    for i in range(4):
+    first_pred = []
+    for i in range(epochs):
         with torch.no_grad():
             for batch in tqdm(targetloader,desc='running train loader'):
                 images, labels = batch
-                images = torch.tensor(images).to(device)
+                images = torch.tensor(images.to(device))
 
                 pred1, pred2 = model(images)
                 pred1 = interp(pred1)
                 pred2 = interp(pred2)
+                first_pred.append(float(pred1[0][0][0][0]))
 
                 # loss_seg1 = loss_calc(pred1, labels, args.gpu)
-                loss_seg2 = loss_calc(pred2, labels, device)
-                print(loss_seg2)
+    print(np.mean(first_pred))
     if config.msm:
         sdice_test = get_dice(model,test_ds,device,config,interp)
     else:
@@ -81,15 +84,16 @@ def main():
     cli.add_argument("--target")
 
     opts = cli.parse_args()
-    if opts.msm:
+    if config.msm:
         assert opts.target ==opts.source
+    else:
+        assert opts.target !=opts.source
     random.seed(42)
     np.random.seed(42)
     torch.manual_seed(42)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
-    metric = 'sdice_score' if not config.msm else 'dice'
-    run_adaBN(source=opts.source, target=opts.target, device=opts.device, metric=metric)
+    run_adaBN(source=opts.source, target=opts.target, device=opts.device)
 
 
 if __name__ == '__main__':

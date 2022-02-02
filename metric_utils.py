@@ -32,7 +32,7 @@ def dice(gt,pred):
     p[pred == 1] = 1
     return (2*np.sum(g*p))/(np.sum(g)+np.sum(p))
 
-def get_sdice(model,ds,config,device,interp):
+def get_sdice(model,ds,device,config,interp):
     loader= data.DataLoader(ds,batch_size=config.batch_size, shuffle=False)
     model.eval()
     sdice_for_id={}
