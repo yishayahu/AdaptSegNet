@@ -6,7 +6,6 @@ from dataclasses import dataclass
 class BaseConfig:
     batch_size = 8
     use_accumulate_for_loss = True
-
     debug= False
     exp_dir = None
 
@@ -27,7 +26,7 @@ class DebugConfigCC359:
 class DebugMsm:
     n_clusters = 2
     batch_size = 2
-    lr = 1e-5
+    lr = 1e-3
     use_accumulate_for_loss = True
     save_pred_every =  5
     debug= True
@@ -49,7 +48,7 @@ class MsmConfig(BaseConfig):
     base_res_path ='/home/dsi/shaya/unsup_resres_msm/'
     msm = True
     n_channels= 3
-    save_pred_every =  100
+    save_pred_every = 100
     epoch_every = 100
     num_steps = 1000
 

@@ -62,14 +62,16 @@ def _connectivity_region_analysis(mask):
 
     return label_im
 def dice(gt,pred):
+    gt = gt.squeeze(1)
     g = np.zeros(gt.shape)
     p = np.zeros(pred.shape)
     g[gt == 1] = 1
     p[pred == 1] = 1
     return (2*np.sum(g*p))/(np.sum(g)+np.sum(p))
 
+
 if True:
-    config = DebugMsm()
+    config = MsmConfig()
 else:
     config = DebugConfig()
 IMG_MEAN = np.array((104.00698793, 116.66876762, 122.67891434), dtype=np.float32)
@@ -458,8 +460,6 @@ def train_pretrain(model,optimizer,trainloader,interp):
             loss_seg_value += loss_seg.data.cpu().numpy() / args.iter_size
 
         optimizer.step()
-
-
         print(
             'iter = {0:8d}/{1:8d}, loss_seg1 = {2:.3f}'.format(
                 i_iter, config.num_steps, loss_seg_value))
@@ -650,6 +650,7 @@ def train_clustering(model,optimizer,trainloader,targetloader,interp,val_ds,test
                         accumulate_for_loss[slice_to_cluster[f'{id1}_{slc_num}']].append(feature)
                     else:
                         dist_loss+= torch.mean(torch.abs(feature - best_matchs[slice_to_cluster[f'{id1}_{slc_num}']].to(args.gpu)))
+
             if accumulate_for_loss is not None:
                 use_dist_loss = False
                 lens1 = [len(x) for x in accumulate_for_loss]
@@ -703,8 +704,14 @@ def main():
 
         ckpt_path = Path(config.base_res_path) / f'source_{args.source}' / 'pretrain' / 'best_model.pth'
         model.load_state_dict(torch.load(ckpt_path,map_location='cpu'))
-        optimizer = optim.SGD(model.parameters(),
-                              lr=config.lr, momentum=args.momentum, weight_decay=args.weight_decay)
+        # optimizer = optim.SGD(model.parameters(),
+        #                       lr=config.lr, momentum=args.momentum, weight_decay=args.weight_decay)
+        optimizer = torch.optim.Adam(
+            model.parameters(),
+            lr=config.lr,
+            weight_decay=0
+        )
+
     else:
         config.exp_dir = Path(config.base_res_path) /f'source_{args.source}' / args.mode
         saved_state_dict = model_zoo.load_url('http://vllab.ucmerced.edu/ytsai/CVPR18/DeepLab_resnet_pretrained_init-f81d91e8.pth')
@@ -721,8 +728,15 @@ def main():
         for x in nn1:
             new_params.pop(x)
         model.load_state_dict(new_params,strict=False)
-        optimizer = optim.SGD(model.optim_parameters(config),
-                              lr=config.lr, momentum=args.momentum, weight_decay=args.weight_decay)
+        # optimizer = optim.SGD(model.optim_parameters(config),
+        #                       lr=config.lr, momentum=args.momentum, weight_decay=args.weight_decay)
+
+        optimizer = torch.optim.Adam(
+        model.optim_parameters(config),
+        lr = config.lr,
+        weight_decay = 0
+    )
+
     config.exp_dir.mkdir(parents=True,exist_ok=True)
     json.dump(dataclasses.asdict(config),open(config.exp_dir/'config.json','w'))
 
