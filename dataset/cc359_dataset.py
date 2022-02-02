@@ -166,7 +166,7 @@ class CC359Ds(torch.utils.data.Dataset):
                 img_slc,seg_slc = get_random_patch_2d(img_slc,seg_slc,x_patch_size=x_patch_size,y_patch_size=y_patch_size)
                 img_slc,seg_slc = np.expand_dims(img_slc, axis=0),np.expand_dims(seg_slc, axis=0)
                 if self.yield_id:
-                    return img_slc,seg_slc,id1,slc_num
+                    return img_slc,seg_slc,self.load_id(id1),slc_num
                 return img_slc,seg_slc
 
     def __len__(self):

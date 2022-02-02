@@ -462,12 +462,12 @@ def train_clustering(model,optimizer,trainloader,targetloader,interp,val_ds,test
             for id_slc,feat in slice_to_feature_source.items():
                 points.append(feat)
                 id1, slc_num = id_slc.split('_')
-                slc_num = int(slc_num) / id_to_num_slices[val_ds.load_id(id1)]
+                slc_num = int(slc_num) / id_to_num_slices[id1]
                 slices.append(slc_num)
             for id_slc,feat in slice_to_feature_target.items():
                 points.append(feat)
                 id1, slc_num = id_slc.split('_')
-                slc_num = int(slc_num)/ id_to_num_slices[val_ds.load_id(id1)]
+                slc_num = int(slc_num)/ id_to_num_slices[id1]
                 slices.append(slc_num)
             points = np.array(points)
             points = points.reshape(points.shape[0],-1)

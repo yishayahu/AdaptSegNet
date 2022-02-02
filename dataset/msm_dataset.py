@@ -41,7 +41,7 @@ class MultiSiteMri(torch.utils.data.Dataset):
                 img,seg = self.patches_Allimages[id1[0]],self.patches_Allmasks[id1[0]]
                 slc_num = idx-i
                 if self.yield_id:
-                    return img[slc_num],seg[slc_num],id1,slc_num
+                    return img[slc_num],seg[slc_num],self.load_id(id1),slc_num
                 return img[slc_num],seg[slc_num]
 
     def __len__(self):
