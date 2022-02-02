@@ -171,3 +171,6 @@ class CC359Ds(torch.utils.data.Dataset):
 
     def __len__(self):
         return self.len_ds
+
+    def load_id(self,id1):
+        return int(id1[2:])

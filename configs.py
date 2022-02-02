@@ -51,6 +51,8 @@ class MsmConfig(BaseConfig):
     save_pred_every = 100
     epoch_every = 100
     num_steps = 1000
+    use_slice_num = True
+    id_to_num_slices = '/home/dsi/shaya/id_to_num_slices_msm.json'
 
 @dataclass
 class CcConfig(BaseConfig):
@@ -65,3 +67,5 @@ class CcConfig(BaseConfig):
     save_pred_every =  500
     epoch_every = 1000
     num_steps = 10000
+    use_slice_num = True
+    id_to_num_slices = '/home/dsi/shaya/id_to_num_slices.json'
