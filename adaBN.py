@@ -33,7 +33,7 @@ def loss_calc(pred, label, gpu):
     return criterion(pred, label)
 
 def run_adaBN(source, target, device):
-
+    metric = 'dice' if config.msm else 'sdice'
     ckpt_path = Path(config.base_res_path) / f'source_{source}' / 'pretrain' / 'best_model.pth'
     model = DeeplabMulti(num_classes=2,n_channels=config.n_channels)
     model.load_state_dict(torch.load(ckpt_path,map_location='cpu'))
@@ -74,7 +74,8 @@ def run_adaBN(source, target, device):
     p1 = Path(f'{config.base_res_path}/source_{source}_target_{target}/adaBN/')
     p1.mkdir(parents=True, exist_ok=True)
     torch.save(model.state_dict(),f'{config.base_res_path}/source_{source}_target_{target}/adaBN/model.pth')
-    json.dump({"sdice/test": sdice_test, "sdice/test_best":sdice_test},open(p1 / 'scores.json','w'))
+    print(sdice_test)
+    json.dump({f"{metric}/test": sdice_test, f"{metric}/test_best":sdice_test},open(p1 / 'scores.json','w'))
 
 
 def main():
