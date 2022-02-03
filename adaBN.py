@@ -58,7 +58,6 @@ def run_adaBN(source, target, device):
         epochs = 1
     targetloader = data.DataLoader(target_ds, batch_size=config.batch_size, shuffle=True)
     model.train()
-    interp = nn.Upsample(size=(config.input_size[1], config.input_size[0]), mode='bilinear',align_corners=True)
     first_pred = []
     for i in range(epochs):
         with torch.no_grad():
@@ -67,15 +66,14 @@ def run_adaBN(source, target, device):
                 images = torch.tensor(images.to(device))
 
                 pred1, pred2 = model(images)
-                pred2 = interp(pred2)
                 first_pred.append(float(pred2[0][0][0][0]))
 
                 # loss_seg1 = loss_calc(pred1, labels, args.gpu)
     print(np.mean(first_pred))
     if config.msm:
-        sdice_test = get_dice(model,test_ds,device,config,interp)
+        sdice_test = get_dice(model,test_ds,device,config)
     else:
-        sdice_test = get_sdice(model,test_ds,device,config,interp)
+        sdice_test = get_sdice(model,test_ds,device,config)
     p1 = Path(f'{config.base_res_path}/source_{source}_target_{target}/adaBN/')
     p1.mkdir(parents=True, exist_ok=True)
     torch.save(model.state_dict(),f'{config.base_res_path}/source_{source}_target_{target}/adaBN/model.pth')

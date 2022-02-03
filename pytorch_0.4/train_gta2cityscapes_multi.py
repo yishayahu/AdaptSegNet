@@ -247,8 +247,7 @@ def main():
         bce_loss = torch.nn.MSELoss()
     seg_loss = torch.nn.CrossEntropyLoss(ignore_index=255)
 
-    interp = nn.Upsample(size=(input_size[1], input_size[0]), mode='bilinear', align_corners=True)
-    interp_target = nn.Upsample(size=(input_size_target[1], input_size_target[0]), mode='bilinear', align_corners=True)
+
 
     # labels for adversarial training
     source_label = 0
@@ -299,8 +298,7 @@ def main():
             labels = labels.long().to(device)
 
             pred1, pred2 = model(images)
-            pred1 = interp(pred1)
-            pred2 = interp(pred2)
+
 
             loss_seg1 = seg_loss(pred1, labels)
             loss_seg2 = seg_loss(pred2, labels)
@@ -319,8 +317,6 @@ def main():
             images = images.to(device)
 
             pred_target1, pred_target2 = model(images)
-            pred_target1 = interp_target(pred_target1)
-            pred_target2 = interp_target(pred_target2)
 
             D_out1 = model_D1(F.softmax(pred_target1))
             D_out2 = model_D2(F.softmax(pred_target2))

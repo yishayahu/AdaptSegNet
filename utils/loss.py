@@ -3,12 +3,12 @@ import torch.nn.functional as F
 import torch.nn as nn
 from torch.autograd import Variable
 
-def freeze_model(model, include_layers=('inconv', )):
+def freeze_model(model, exclude_layers=('inconv', )):
     for name, param in model.named_parameters():
-        requires_grad = True
-        for l in include_layers:
+        requires_grad = False
+        for l in exclude_layers:
             if l in name:
-                requires_grad = False
+                requires_grad = True
         param.requires_grad = requires_grad
 
 class CrossEntropy2d(nn.Module):

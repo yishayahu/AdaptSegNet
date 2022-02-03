@@ -19,9 +19,8 @@ cudnn.benchmark = True
 class MultiSiteMri(torch.utils.data.Dataset):
     def __init__(self, ids,yield_id=False,test=False):
         self.yield_id  = yield_id
-        self.patches_Allimages, self.patches_Allmasks = self.create_datalists(ids)
         self.test = test
-
+        self.patches_Allimages, self.patches_Allmasks = self.create_datalists(ids)
 
     def load_image(self,id1):
         return self.patches_Allimages[id1[0]]

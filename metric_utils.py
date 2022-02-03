@@ -28,7 +28,7 @@ def dice(gt,pred):
     p[pred == 1] = 1
     return (2*np.sum(g*p))/(np.sum(g)+np.sum(p))
 
-def get_sdice(model,ds,device,config,interp):
+def get_sdice(model,ds,device,config):
     loader= data.DataLoader(ds,batch_size=1, shuffle=False)
     model.eval()
     prev_id = None
@@ -40,8 +40,8 @@ def get_sdice(model,ds,device,config,interp):
 
         for images,segs,ids,slc_num in tqdm(loader,desc='running test loader'):
             id1 = int(ids[0])
-            _, output2 = model(images.to(device))
-            output = interp(output2).cpu().data.numpy()
+            _, output = model(images.to(device))
+            output = output.cpu().data.numpy()
             output = np.asarray(np.argmax(output, axis=1), dtype=np.uint8).astype(bool)
             segs = segs.squeeze(1).numpy().astype(bool)
             if prev_id is None:
@@ -57,15 +57,15 @@ def get_sdice(model,ds,device,config,interp):
             all_segs.append(segs[0])
 
     return float(np.mean(all_sdices))
-def get_dice(model,ds,device,config,interp):
+def get_dice(model,ds,device,config):
     model.eval()
     dices = []
     with torch.no_grad():
         for id1,images in tqdm(ds.patches_Allimages.items(),desc='running val or test loader'):
             segs = ds.patches_Allmasks[id1]
             images = Variable(torch.tensor(images)).to(device)
-            _, output2 = model(images)
-            output = interp(output2).cpu().data.numpy()
+            _, output = model(images)
+            output = output.cpu().data.numpy()
             output = np.asarray(np.argmax(output, axis=1), dtype=np.uint8).astype(bool)
             output = _connectivity_region_analysis(output)
             dices.append(dice(segs,output))

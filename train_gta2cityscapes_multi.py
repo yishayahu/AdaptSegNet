@@ -56,7 +56,6 @@ def tensor_to_image(tensor):
 
 ITER_SIZE = 1
 NUM_WORKERS = 4
-IGNORE_LABEL = 255
 MOMENTUM = 0.9
 NUM_CLASSES = 2
 NUM_STEPS_STOP = 150000  # early stopping
@@ -88,8 +87,6 @@ def get_arguments():
                         help="Accumulate gradients for ITER_SIZE iterations.")
     parser.add_argument("--num-workers", type=int, default=NUM_WORKERS,
                         help="number of workers for multithread dataloading.")
-    parser.add_argument("--ignore-label", type=int, default=IGNORE_LABEL,
-                        help="The index of the label to ignore during the training.")
     parser.add_argument("--is-training", action="store_true",
                         help="Whether to updates the running means and variances during the training.")
     parser.add_argument("--learning-rate-D", type=float, default=LEARNING_RATE_D,
@@ -166,16 +163,16 @@ def adjust_learning_rate_D(optimizer, i_iter):
         optimizer.param_groups[1]['lr'] = lr * 10
 
 
-def after_step(num_step,val_ds,test_ds,model,interp):
+def after_step(num_step,val_ds,test_ds,model):
 
 
     metric = 'dice' if config.msm else 'sdice'
     global best_sdice
     if num_step % config.save_pred_every == 0 and num_step!= 0:
         if config.msm:
-            sdice1 = get_dice(model,val_ds,args.gpu,config,interp)
+            sdice1 = get_dice(model,val_ds,args.gpu,config)
         else:
-            sdice1 =get_sdice(model,val_ds,args.gpu,config,interp)
+            sdice1 = get_sdice(model,val_ds,args.gpu,config)
         wandb.log({f'{metric}/val':sdice1},step=num_step)
         print(f'{metric} is ',sdice1)
         print ('taking snapshot ...')
@@ -189,22 +186,22 @@ def after_step(num_step,val_ds,test_ds,model,interp):
         title = 'end' if num_step != 0 else 'start'
         scores = {}
         if config.msm:
-            sdice_test = get_dice(model,test_ds,args.gpu,config,interp)
+            sdice_test = get_dice(model,test_ds,args.gpu,config)
         else:
-            sdice_test = get_sdice(model,test_ds,args.gpu,config,interp)
+            sdice_test = get_sdice(model,test_ds,args.gpu,config)
         scores[f'{metric}_{title}/test'] = sdice_test
         if num_step != 0:
             model.load_state_dict(torch.load(config.exp_dir / f'best_model.pth',map_location='cpu'))
             if config.msm:
-                sdice_test_best = get_dice(model,test_ds,args.gpu,config,interp)
+                sdice_test_best = get_dice(model,test_ds,args.gpu,config)
             else:
-                sdice_test_best =get_sdice(model,test_ds,args.gpu,config,interp)
+                sdice_test_best =get_sdice(model,test_ds,args.gpu,config)
             scores[f'{metric}_{title}/test_best'] = sdice_test_best
 
         wandb.log(scores,step=num_step)
         json.dump(scores,open(config.exp_dir/f'scores_{title}.json','w'))
 
-def train_their(model,optimizer,trainloader,targetloader,interp,interp_target,val_ds,test_ds):
+def train_their(model,optimizer,scheduler,trainloader,targetloader,val_ds,test_ds):
     trainloader_iter = iter(trainloader)
     targetloader_iter = iter(targetloader)
     bce_loss = torch.nn.BCEWithLogitsLoss()
@@ -265,8 +262,7 @@ def train_their(model,optimizer,trainloader,targetloader,interp,interp_target,va
             images = Variable(images).to(args.gpu)
 
             pred1, pred2 = model(images)
-            pred1 = interp(pred1)
-            pred2 = interp(pred2)
+
 
             # loss_seg1 = loss_calc(pred1, labels, args.gpu)
             loss_seg2 = loss_calc(pred2, labels, args.gpu)
@@ -289,8 +285,6 @@ def train_their(model,optimizer,trainloader,targetloader,interp,interp_target,va
             images = Variable(images).to(args.gpu)
 
             pred_target1, pred_target2 = model(images)
-            pred_target1 = interp_target(pred_target1)
-            pred_target2 = interp_target(pred_target2)
 
             D_out1 = model_D1(F.softmax(pred_target1))
             D_out2 = model_D2(F.softmax(pred_target2))
@@ -369,8 +363,8 @@ def train_their(model,optimizer,trainloader,targetloader,interp,interp_target,va
         print(
             'iter = {0:8d}/{1:8d}, loss_seg1 = {2:.3f} loss_seg2 = {3:.3f} loss_adv1 = {4:.3f}, loss_adv2 = {5:.3f} loss_D1 = {6:.3f} loss_D2 = {7:.3f}'.format(
                 i_iter, config.num_steps, loss_seg_value1, loss_seg_value2, loss_adv_target_value1, loss_adv_target_value2, loss_D_value1, loss_D_value2))
-        after_step(i_iter,interp=interp,model =model,val_ds=val_ds,test_ds=test_ds)
-def train_pretrain(model,optimizer,trainloader,interp):
+        after_step(i_iter,model =model,val_ds=val_ds,test_ds=test_ds)
+def train_pretrain(model,optimizer,scheduler,trainloader):
     if config.msm:
         val_ds = MultiSiteMri(load(f'{config.base_splits_path}/site_{args.source}t/val_ids.json'),yield_id=True,test=True)
         test_ds = MultiSiteMri(load(f'{config.base_splits_path}/site_{args.source}t/test_ids.json'),yield_id=True,test=True)
@@ -396,7 +390,6 @@ def train_pretrain(model,optimizer,trainloader,interp):
             images = Variable(images).to(args.gpu)
 
             _, pred = model(images)
-            pred = interp(pred)
             loss_seg = loss_calc(pred, labels, args.gpu)
             loss = loss_seg
             # proper normalization
@@ -405,12 +398,13 @@ def train_pretrain(model,optimizer,trainloader,interp):
             loss_seg_value += loss_seg.data.cpu().numpy() / args.iter_size
 
         optimizer.step()
+        scheduler.step()
 
 
         print(
             'iter = {0:8d}/{1:8d}, loss_seg1 = {2:.3f}'.format(
                 i_iter, config.num_steps, loss_seg_value))
-        after_step(i_iter,interp=interp,model =model,val_ds=val_ds,test_ds=test_ds)
+        after_step(i_iter,model =model,val_ds=val_ds,test_ds=test_ds)
 
 def get_best_match_aux(distss):
     n_clusters = len(distss)
@@ -431,8 +425,8 @@ def get_best_match(sc, tc):
 
     return best_match
 
-def train_clustering(model,optimizer,trainloader,targetloader,interp,val_ds,test_ds):
-    freeze_model(model,include_layers=['layer3','layer4','layer5','layer6'])
+def train_clustering(model,optimizer,scheduler,trainloader,targetloader,val_ds,test_ds):
+    freeze_model(model,exclude_layers = [ 'init_path', 'down','bottleneck' ])
     trainloader.dataset.yield_id = True
     targetloader.dataset.yield_id = True
     trainloader_iter = iter(trainloader)
@@ -461,7 +455,7 @@ def train_clustering(model,optimizer,trainloader,targetloader,interp,val_ds,test
                 model.module.get_bottleneck = False
             else:
                 model.get_bottleneck = False
-            after_step(i_iter,val_ds,test_ds,model,interp)
+            after_step(i_iter,val_ds,test_ds,model)
             continue
         if config.parallel_model:
             model.module.get_bottleneck = True
@@ -575,7 +569,6 @@ def train_clustering(model,optimizer,trainloader,targetloader,interp,val_ds,test
             vizviz = {}
             log_log = {f'figs/source': wandb.Image(im_path_source),f'figs/target': wandb.Image(im_path_target),f'figs/cluster': wandb.Image(im_path_clusters)}
             wandb.log(log_log,step=i_iter)
-        loss_seg_value = 0
         log_log = {}
         adjust_learning_rate(optimizer, i_iter)
         for sub_i in range(args.iter_size):
@@ -605,13 +598,11 @@ def train_clustering(model,optimizer,trainloader,targetloader,interp,val_ds,test
                             img = tensor_to_image(img)
                             img.save(im_path)
                         log_log[f'{src_cluster}/source_{len(vizviz[f"source_{src_cluster}"])}'] = wandb.Image(im_path)
-            pred = interp(pred)
             loss_seg = loss_calc(pred, labels, args.gpu)
             loss = loss_seg
             # proper normalization
             loss = loss / args.iter_size
 
-            loss_seg_value += loss_seg.data.cpu().numpy() / args.iter_size
             try:
                 batch = targetloader_iter.next()
             except StopIteration:
@@ -661,15 +652,18 @@ def train_clustering(model,optimizer,trainloader,targetloader,interp,val_ds,test
             if accumulate_for_loss is None:
                 losses_dict['total'].backward()
                 optimizer.step()
+                scheduler.step()
                 optimizer.zero_grad()
             else:
                 if use_dist_loss:
                     losses_dict['total'].backward()
                     optimizer.step()
+                    scheduler.step()
                     optimizer.zero_grad()
                 elif best_matchs is None:
                     losses_dict['seg_loss'].backward()
                     optimizer.step()
+                    scheduler.step()
                     optimizer.zero_grad()
                 else:
                     losses_dict['seg_loss'].backward(retain_graph=True)
@@ -682,7 +676,7 @@ def train_clustering(model,optimizer,trainloader,targetloader,interp,val_ds,test
             model.module.get_bottleneck = False
         else:
             model.get_bottleneck = False
-        after_step(i_iter,val_ds,test_ds,model,interp)
+        after_step(i_iter,val_ds,test_ds,model)
 def main():
     """Create the model and start the training."""
 
@@ -701,7 +695,7 @@ def main():
         else:
             config.exp_dir = Path(config.base_res_path) /f'source_{args.source}_target_{args.target}' /  args.mode
 
-        ckpt_path = Path(config.base_res_path) / f'source_{args.source}' / 'pretrain' / 'best_model.pth'
+        ckpt_path = Path(config.base_res_path) / f'source_{args.source}_target_{args.target}' / 'adaBN' / 'model.pth'
         state_dict = torch.load(ckpt_path,map_location='cpu')
         new_state_dict = {}
         for k, v in state_dict.items():
@@ -713,7 +707,7 @@ def main():
                                   lr=config.lr, weight_decay=args.weight_decay)
         else:
             optimizer = optim.SGD(model.parameters(),
-                                  lr=config.lr, momentum=args.momentum, weight_decay=args.weight_decay)
+                                  lr=config.lr, momentum=args.momentum, weight_decay=args.weight_decay,nesterov=True)
     else:
         if args.exp_name != '':
             config.exp_dir = Path(config.base_res_path) /f'source_{args.source}' / args.exp_name
@@ -737,7 +731,11 @@ def main():
                                    lr=config.lr, weight_decay=args.weight_decay)
         else:
             optimizer = optim.SGD(model.parameters(),
-                                  lr=config.lr, momentum=args.momentum, weight_decay=args.weight_decay)
+                                  lr=config.lr, momentum=args.momentum, weight_decay=args.weight_decay,nesterov=True)
+    if config.sched:
+        scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=config.milestones, gamma=config.sched_gamma)
+    else:
+        scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[], gamma=1)
     config.exp_dir.mkdir(parents=True,exist_ok=True)
     json.dump(dataclasses.asdict(config),open(config.exp_dir/'config.json','w'))
 
@@ -787,16 +785,13 @@ def main():
 
     optimizer.zero_grad()
 
-
-    interp = nn.Upsample(size=(input_size[1], input_size[0]), mode='bilinear',align_corners=True)
-    interp_target = nn.Upsample(size=(input_size_target[1], input_size_target[0]), mode='bilinear',align_corners=True)
     if args.mode == 'pretrain':
-        train_pretrain(model,optimizer,trainloader,interp)
+        train_pretrain(model,optimizer,scheduler,trainloader)
     elif args.mode == 'clustering_finetune':
-        train_clustering(model,optimizer,trainloader,targetloader,interp,val_ds,test_ds)
+        train_clustering(model,optimizer,scheduler,trainloader,targetloader,val_ds,test_ds)
     else:
         assert args.mode == 'their'
-        train_their(model,optimizer,trainloader,targetloader,interp,interp_target,val_ds,test_ds)
+        train_their(model,optimizer,scheduler,trainloader,targetloader,val_ds,test_ds)
 
 
 
