@@ -44,11 +44,12 @@ def get_sdice(model,ds,device,config,interp):
             output = np.asarray(np.argmax(output, axis=1), dtype=np.uint8).astype(bool)
             segs = segs.squeeze(1).numpy().astype(bool)
             for out1,seg1,id1 in zip(output,segs,ids):
+                id1 = id1.item()
                 out1 = np.expand_dims(out1, 0)
                 seg1 = np.expand_dims(seg1, 0)
                 if id1 not in sdice_for_id:
                     sdice_for_id[id1] = []
-                curr_sdice = sdice(seg1,out1,ds.spacing_loader(id1))
+                curr_sdice = sdice(seg1,out1,ds.spacing_loader('CC0'+str(id1)))
                 assert not np.any(np.isnan(curr_sdice))
                 sdice_for_id[id1].append(curr_sdice)
     all_sdices = [np.mean(sdices) for sdices in sdice_for_id.values()]

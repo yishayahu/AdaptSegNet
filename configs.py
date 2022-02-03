@@ -10,18 +10,8 @@ class BaseConfig:
     debug= False
     exp_dir = None
 
-@dataclass
-class DebugConfigCC359:
-    n_clusters = 2
-    batch_size = 2
-    lr = 1e-5
-    use_accumulate_for_loss = True
-    data_len = 3
-    save_pred_every =  5
-    debug= True
-    epoch_every = 20
-    num_steps = 50
-    exp_dir = None
+
+
 
 @dataclass
 class DebugMsm:
@@ -70,3 +60,16 @@ class CcConfig(BaseConfig):
     num_steps = 10000
     use_slice_num = True
     id_to_num_slices = '/home/dsi/shaya/id_to_num_slices.json'
+
+@dataclass
+class DebugConfigCC359(CcConfig):
+    n_clusters = 2
+    batch_size = 2
+    lr = 1e-5
+    use_accumulate_for_loss = True
+    data_len = 3
+    save_pred_every =  5
+    debug= True
+    epoch_every = 20
+    num_steps = 50
+    exp_dir = None

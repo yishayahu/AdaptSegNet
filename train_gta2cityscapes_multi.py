@@ -27,6 +27,7 @@ import os.path as osp
 import matplotlib.pyplot as plt
 import random
 from dpipe.io import load
+from torch.utils.data import WeightedRandomSampler
 from tqdm import tqdm
 from metric_utils import get_sdice,get_dice
 from dataset.cc359_dataset import CC359Ds
@@ -40,9 +41,9 @@ from configs import *
 
 
 if True:
-    config = MsmConfig()
+    config = CcConfig()
 else:
-    config = DebugConfig()
+    config = DebugConfigCC359()
 IMG_MEAN = np.array((104.00698793, 116.66876762, 122.67891434), dtype=np.float32)
 
 MODEL = 'DeepLab'
@@ -177,7 +178,7 @@ def after_step(num_step,val_ds,test_ds,model,interp):
 
             torch.save(model.state_dict(), config.exp_dir / f'best_model.pth')
         torch.save(model.state_dict(), config.exp_dir / f'model.pth')
-    if num_step  == config.num_steps - 1:
+    if num_step  == config.num_steps - 1 or num_step == 0:
         if config.msm:
             sdice_test = get_dice(model,test_ds,args.gpu,config,interp)
         else:
@@ -187,9 +188,11 @@ def after_step(num_step,val_ds,test_ds,model,interp):
             sdice_test_best = get_dice(model,test_ds,args.gpu,config,interp)
         else:
             sdice_test_best =get_sdice(model,test_ds,args.gpu,config,interp)
-        scores = {f'{metric}/test':sdice_test,f'{metric}/test_best':sdice_test_best}
+        if num_step != 0:
+            num_step = 'end'
+        scores = {f'{metric}_{num_step}/test':sdice_test,f'{metric}_{num_step}/test_best':sdice_test_best}
         wandb.log(scores,step=num_step)
-        json.dump(scores,open(config.exp_dir/'scores.json','w'))
+        json.dump(scores,open(config.exp_dir/f'scores_{num_step}.json','w'))
 
 def train_their(model,optimizer,trainloader,targetloader,interp,interp_target,val_ds,test_ds):
     trainloader_iter = iter(trainloader)
