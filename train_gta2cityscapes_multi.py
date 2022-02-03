@@ -35,7 +35,7 @@ from configs import *
 
 
 if True:
-    config = MsmConfigFinetuneClustering()
+    config = CC359ConfigPretrain()
 else:
     config = DebugConfigCC359()
 

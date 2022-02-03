@@ -5,7 +5,7 @@ from dpipe.layers.conv import PreActivation2d
 
 
 class UNet2D(nn.Module):
-    def __init__(self, n_chans_in, n_chans_out=2, n_filters_init=8,get_bottleneck=False):
+    def __init__(self, n_chans_in, n_chans_out=2, n_filters_init=16,get_bottleneck=False):
         super().__init__()
         self.n_filters_init = n_filters_init
         n = n_filters_init
