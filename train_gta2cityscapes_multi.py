@@ -129,6 +129,7 @@ def get_arguments():
                         help="choose adaptation set.")
     parser.add_argument("--gan", type=str, default=GAN,
                         help="choose the GAN objective.")
+    parser.add_argument('--exp_name',default='')
     return parser.parse_args()
 
 
@@ -592,7 +593,7 @@ def train_clustering(model,optimizer,trainloader,targetloader,interp,val_ds,test
                         vizviz[f'source_{src_cluster}'].append(None)
                         im_path =  str(config.exp_dir / f'source_{src_cluster}_{i_iter}_{len(vizviz[f"source_{src_cluster}"])}.png')
                         if img.shape[0] == 3:
-                            plt.imsave(im_path,  np.array(img[1]), cmap='gray')
+                            plt.imsave(im_path,  np.array(img[1].detach().cpu()), cmap='gray')
                         else:
                             img = tensor_to_image(img)
                             img.save(im_path)
@@ -629,7 +630,7 @@ def train_clustering(model,optimizer,trainloader,targetloader,interp,val_ds,test
                         vizviz[f'target_{src_cluster}'].append(None)
                         im_path =  str(config.exp_dir /  f'target_{src_cluster}_{i_iter}_{len(vizviz[f"target_{src_cluster}"])}.png')
                         if img.shape[0] == 3:
-                            plt.imsave(im_path,  np.array(img[1]), cmap='gray')
+                            plt.imsave(im_path,  np.array(img[1].detach().cpu()), cmap='gray')
                         else:
                             img = tensor_to_image(img)
                             img.save(im_path)
@@ -637,7 +638,7 @@ def train_clustering(model,optimizer,trainloader,targetloader,interp,val_ds,test
             if accumulate_for_loss is not None:
                 use_dist_loss = False
                 lens1 = [len(x) for x in accumulate_for_loss]
-                if np.sum(lens1) > 25:
+                if np.sum(lens1) > 35:
                     use_dist_loss = True
                 if use_dist_loss:
                     for i,features in enumerate(accumulate_for_loss):
@@ -688,43 +689,43 @@ def main():
     model = DeeplabMulti(num_classes=args.num_classes,n_channels=config.n_channels)
 
     if args.mode != 'pretrain':
-        config.exp_dir = Path(config.base_res_path) /f'source_{args.source}_target_{args.target}' / args.mode
+        if args.exp_name != '':
+            config.exp_dir = Path(config.base_res_path) /f'source_{args.source}_target_{args.target}' /  args.exp_name
+        else:
+            config.exp_dir = Path(config.base_res_path) /f'source_{args.source}_target_{args.target}' /  args.mode
 
         ckpt_path = Path(config.base_res_path) / f'source_{args.source}' / 'pretrain' / 'best_model.pth'
         model.load_state_dict(torch.load(ckpt_path,map_location='cpu'))
-        # optimizer = optim.SGD(model.parameters(),
-        #                       lr=config.lr, momentum=args.momentum, weight_decay=args.weight_decay)
-        optimizer = torch.optim.Adam(
-            model.parameters(),
-            lr=config.lr,
-            weight_decay=0
-        )
-
+        if config.msm:
+            optimizer = optim.Adam(model.parameters(),
+                                  lr=config.lr, weight_decay=args.weight_decay)
+        else:
+            optimizer = optim.SGD(model.parameters(),
+                                  lr=config.lr, momentum=args.momentum, weight_decay=args.weight_decay)
     else:
-        config.exp_dir = Path(config.base_res_path) /f'source_{args.source}' / args.mode
+        if args.exp_name != '':
+            config.exp_dir = Path(config.base_res_path) /f'source_{args.source}' / args.exp_name
+        else:
+            config.exp_dir = Path(config.base_res_path) /f'source_{args.source}' / args.mode
+
         saved_state_dict = model_zoo.load_url('http://vllab.ucmerced.edu/ytsai/CVPR18/DeepLab_resnet_pretrained_init-f81d91e8.pth')
         new_params = model.state_dict().copy()
         for i in saved_state_dict:
             # Scale.layer5.conv2d_list.3.weight
             i_parts = i.split('.')
-            # print i_parts
             if not args.num_classes == 19 or not i_parts[1] == 'layer5':
                 new_params['.'.join(i_parts[1:])] = saved_state_dict[i]
-                # print i_parts
 
         nn1 = [x for x in new_params.keys() if x == 'conv1.weight' or 'layer5' in x]
         for x in nn1:
             new_params.pop(x)
         model.load_state_dict(new_params,strict=False)
-        # optimizer = optim.SGD(model.optim_parameters(config),
-        #                       lr=config.lr, momentum=args.momentum, weight_decay=args.weight_decay)
-
-        optimizer = torch.optim.Adam(
-        model.optim_parameters(config),
-        lr = config.lr,
-        weight_decay = 0
-    )
-
+        if config.msm:
+            optimizer = optim.Adam(model.optim_parameters(config),
+                                  lr=config.lr, weight_decay=args.weight_decay)
+        else:
+            optimizer = optim.SGD(model.optim_parameters(config),
+                                  lr=config.lr, momentum=args.momentum, weight_decay=args.weight_decay)
     config.exp_dir.mkdir(parents=True,exist_ok=True)
     json.dump(dataclasses.asdict(config),open(config.exp_dir/'config.json','w'))
 
@@ -735,7 +736,7 @@ def main():
 
     model.to(args.gpu)
     if config.parallel_model:
-        model = torch.nn.DataParallel(model, device_ids=[1, 0, 3, 5])
+        model = torch.nn.DataParallel(model, device_ids=[1, 0, 5])
     random.seed(RANDOM_SEED)
     np.random.seed(RANDOM_SEED)
     torch.manual_seed(RANDOM_SEED)
@@ -754,14 +755,20 @@ def main():
         val_ds = CC359Ds(load(f'{config.base_splits_path}/site_{args.target}/val_ids.json'),yield_id=True,slicing_interval=1)
         test_ds = CC359Ds(load(f'{config.base_splits_path}/site_{args.target}/test_ids.json'),yield_id=True,slicing_interval=1)
         project = 'adaptSegNet'
-    wandb.init(
-        project=project,
-        id=wandb.util.generate_id(),
-        name=args.mode + str(args.source) + '_' + str(args.target),
-    )
+    if config.debug:
+        wandb.init(
+            project='spot3',
+            id=wandb.util.generate_id(),
+            name=args.exp_name,
+        )
+    else:
+        wandb.init(
+            project=project,
+            id=wandb.util.generate_id(),
+            name=args.exp_name,
+        )
     trainloader = data.DataLoader(source_ds,batch_size=config.source_batch_size, shuffle=True, num_workers=args.num_workers,pin_memory=True)
     targetloader = data.DataLoader(target_ds, batch_size=config.target_batch_size, shuffle=True, num_workers=args.num_workers,pin_memory=True)
-    # implement model.optim_parameters(args) to handle different models' lr setting
 
 
     optimizer.zero_grad()

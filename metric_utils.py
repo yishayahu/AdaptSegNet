@@ -6,11 +6,7 @@ from tqdm import tqdm
 import surface_distance.metrics as surf_dc
 from torch.autograd import Variable
 def sdice(a, b, spacing, tolerance=1):
-    if np.count_nonzero(a) == 0:
-        non_zeros = np.count_nonzero(b)
-        if  non_zeros == 0:
-            return 1
-    surface_distances = surf_dc.compute_surface_distances(b, a, spacing)
+    surface_distances = surf_dc.compute_surface_distances(a, b, spacing)
     return surf_dc.compute_surface_dice_at_tolerance(surface_distances, tolerance)
 
 
@@ -33,26 +29,33 @@ def dice(gt,pred):
     return (2*np.sum(g*p))/(np.sum(g)+np.sum(p))
 
 def get_sdice(model,ds,device,config,interp):
-    loader= data.DataLoader(ds,batch_size=config.target_batch_size, shuffle=False)
+    loader= data.DataLoader(ds,batch_size=1, shuffle=False)
     model.eval()
-    sdice_for_id={}
+    prev_id = None
+    all_segs = []
+    all_preds = []
+    done_ids = set()
+    all_sdices = []
     with torch.no_grad():
 
-        for images,segs,ids,_ in tqdm(loader,desc='running test loader'):
+        for images,segs,ids,slc_num in tqdm(loader,desc='running test loader'):
+            id1 = int(ids[0])
             _, output2 = model(images.to(device))
             output = interp(output2).cpu().data.numpy()
             output = np.asarray(np.argmax(output, axis=1), dtype=np.uint8).astype(bool)
             segs = segs.squeeze(1).numpy().astype(bool)
-            for out1,seg1,id1 in zip(output,segs,ids):
-                id1 = id1.item()
-                out1 = np.expand_dims(out1, 0)
-                seg1 = np.expand_dims(seg1, 0)
-                if id1 not in sdice_for_id:
-                    sdice_for_id[id1] = []
-                curr_sdice = sdice(seg1,out1,ds.spacing_loader('CC0'+str(id1)))
-                assert not np.any(np.isnan(curr_sdice))
-                sdice_for_id[id1].append(curr_sdice)
-    all_sdices = [np.mean(sdices) for sdices in sdice_for_id.values()]
+            if prev_id is None:
+                prev_id = id1
+            if id1 != prev_id:
+                assert id1 not in done_ids
+                done_ids.add(id1)
+                all_sdices.append(sdice(np.stack(all_segs),np.stack(all_preds),ds.spacing_loader('CC0'+str(id1))))
+                all_preds = []
+                all_segs = []
+            prev_id = id1
+            all_preds.append(output[0])
+            all_segs.append(segs[0])
+
     return float(np.mean(all_sdices))
 def get_dice(model,ds,device,config,interp):
     model.eval()
