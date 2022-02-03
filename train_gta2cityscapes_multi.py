@@ -27,6 +27,7 @@ from dataset.cc359_dataset import CC359Ds
 from dataset.msm_dataset import MultiSiteMri
 from model.deeplab_multi import DeeplabMulti
 from model.discriminator import FCDiscriminator
+from model.unet import UNet2D
 from utils.loss import CrossEntropy2d, freeze_model
 
 from configs import *
@@ -52,9 +53,9 @@ def tensor_to_image(tensor):
     else:
         assert False
     return PIL.Image.fromarray(tensor)
-MODEL = 'DeepLab'
+
 ITER_SIZE = 1
-NUM_WORKERS = 0
+NUM_WORKERS = 4
 IGNORE_LABEL = 255
 MOMENTUM = 0.9
 NUM_CLASSES = 2
@@ -82,8 +83,7 @@ def get_arguments():
       A list of parsed arguments.
     """
     parser = argparse.ArgumentParser(description="DeepLab-ResNet Network")
-    parser.add_argument("--model", type=str, default=MODEL,
-                        help="available options : DeepLab")
+
     parser.add_argument("--iter-size", type=int, default=ITER_SIZE,
                         help="Accumulate gradients for ITER_SIZE iterations.")
     parser.add_argument("--num-workers", type=int, default=NUM_WORKERS,
@@ -693,7 +693,7 @@ def main():
 
 
     # Create network
-    model = DeeplabMulti(num_classes=args.num_classes,n_channels=config.n_channels)
+    model = UNet2D(config.n_channels)
 
     if args.mode != 'pretrain':
         if args.exp_name != '':
@@ -715,23 +715,23 @@ def main():
         else:
             config.exp_dir = Path(config.base_res_path) /f'source_{args.source}' / args.mode
 
-        saved_state_dict = model_zoo.load_url('http://vllab.ucmerced.edu/ytsai/CVPR18/DeepLab_resnet_pretrained_init-f81d91e8.pth')
-        new_params = model.state_dict().copy()
-        for i in saved_state_dict:
-            # Scale.layer5.conv2d_list.3.weight
-            i_parts = i.split('.')
-            if not args.num_classes == 19 or not i_parts[1] == 'layer5':
-                new_params['.'.join(i_parts[1:])] = saved_state_dict[i]
-
-        nn1 = [x for x in new_params.keys() if x == 'conv1.weight' or 'layer5' in x]
-        for x in nn1:
-            new_params.pop(x)
-        model.load_state_dict(new_params,strict=False)
+        # saved_state_dict = model_zoo.load_url('http://vllab.ucmerced.edu/ytsai/CVPR18/DeepLab_resnet_pretrained_init-f81d91e8.pth')
+        # new_params = model.state_dict().copy()
+        # for i in saved_state_dict:
+        #     # Scale.layer5.conv2d_list.3.weight
+        #     i_parts = i.split('.')
+        #     if not args.num_classes == 19 or not i_parts[1] == 'layer5':
+        #         new_params['.'.join(i_parts[1:])] = saved_state_dict[i]
+        #
+        # nn1 = [x for x in new_params.keys() if x == 'conv1.weight' or 'layer5' in x]
+        # for x in nn1:
+        #     new_params.pop(x)
+        # model.load_state_dict(new_params,strict=False)
         if config.msm:
-            optimizer = optim.Adam(model.optim_parameters(config),
-                                  lr=config.lr, weight_decay=args.weight_decay)
+            optimizer = optim.Adam(model.parameters(),
+                                   lr=config.lr, weight_decay=args.weight_decay)
         else:
-            optimizer = optim.SGD(model.optim_parameters(config),
+            optimizer = optim.SGD(model.parameters(),
                                   lr=config.lr, momentum=args.momentum, weight_decay=args.weight_decay)
     config.exp_dir.mkdir(parents=True,exist_ok=True)
     json.dump(dataclasses.asdict(config),open(config.exp_dir/'config.json','w'))
@@ -757,13 +757,13 @@ def main():
         target_ds = MultiSiteMri(load(f'{config.base_splits_path}/site_{args.target}/train_ids.json'))
         val_ds = MultiSiteMri(load(f'{config.base_splits_path}/site_{args.target}/val_ids.json'),yield_id=True)
         test_ds = MultiSiteMri(load(f'{config.base_splits_path}/site_{args.target}/test_ids.json'),yield_id=True)
-        project = 'adaptSegNetMsm'
+        project = 'adaptSegUNetMsm'
     else:
         source_ds = CC359Ds(load(f'{config.base_splits_path}/site_{args.source}/train_ids.json')[:config.data_len])
         target_ds = CC359Ds(load(f'{config.base_splits_path}/site_{args.target}/train_ids.json')[:config.data_len])
         val_ds = CC359Ds(load(f'{config.base_splits_path}/site_{args.target}/val_ids.json'),yield_id=True,slicing_interval=1)
         test_ds = CC359Ds(load(f'{config.base_splits_path}/site_{args.target}/test_ids.json'),yield_id=True,slicing_interval=1)
-        project = 'adaptSegNet'
+        project = 'adaptSegUNet'
     if config.debug:
         wandb.init(
             project='spot3',

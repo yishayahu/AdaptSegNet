@@ -15,11 +15,18 @@ class CC359BaseConfig:
     save_pred_every =  500
     epoch_every = 1000
     num_steps = 10000
+    parallel_model = False
 
 @dataclass
 class AdabnCC359Config(CC359BaseConfig):
     batch_size = 16
 
+
+@dataclass
+class CC359ConfigPretrain(CC359BaseConfig):
+    source_batch_size = 16
+    target_batch_size = 1
+    lr = 1e-4
 
 @dataclass
 class CC359ConfigFinetuneClustering(CC359BaseConfig):
@@ -62,6 +69,13 @@ class MsmBaseConfig:
     save_pred_every =  100
     epoch_every = 250
     num_steps = 2500
+
+@dataclass
+class MsmPretrainConfig(MsmBaseConfig):
+    lr = 1e-4
+    source_batch_size = 16
+    target_batch_size = 1
+    parallel_model = True
 
 @dataclass
 class MsmConfigFinetuneClustering(MsmBaseConfig):
