@@ -740,6 +740,8 @@ def main():
     if not torch.cuda.is_available():
         print('training on cpu')
         args.gpu = 'cpu'
+        config.parallel_model = False
+        torch.cuda.manual_seed_all(RANDOM_SEED)
 
     model.to(args.gpu)
     if config.parallel_model:
@@ -747,7 +749,6 @@ def main():
     random.seed(RANDOM_SEED)
     np.random.seed(RANDOM_SEED)
     torch.manual_seed(RANDOM_SEED)
-    torch.cuda.manual_seed_all(RANDOM_SEED)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
     if config.msm:
