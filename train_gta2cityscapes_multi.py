@@ -34,7 +34,7 @@ from configs import *
 
 
 if True:
-    config = CC359ConfigFinetuneClustering()
+    config = MsmConfigFinetuneClustering()
 else:
     config = DebugConfigCC359()
 
@@ -456,7 +456,10 @@ def train_clustering(model,optimizer,trainloader,targetloader,interp,val_ds,test
     epoch_dist_loss = []
     optimizer.zero_grad()
     for i_iter in tqdm(range(config.num_steps)):
-        model.get_bottleneck = True
+        if config.parallel_model:
+            model.module.get_bottleneck = True
+        else:
+            model.get_bottleneck = True
         model.train()
         if i_iter % config.epoch_every == 0 and i_iter != 0:
             source_clusters = []
@@ -590,7 +593,7 @@ def train_clustering(model,optimizer,trainloader,targetloader,interp,val_ds,test
                         vizviz[f'source_{src_cluster}'].append(None)
                         im_path =  str(config.exp_dir / f'source_{src_cluster}_{i_iter}_{len(vizviz[f"source_{src_cluster}"])}.png')
                         if img.shape[0] == 3:
-                            plt.imsave(im_path,  np.array(img[1]), cmap='gray')
+                            plt.imsave(im_path,  np.array(img[1].detach().cpu()), cmap='gray')
                         else:
                             img = tensor_to_image(img)
                             img.save(im_path)
@@ -627,7 +630,7 @@ def train_clustering(model,optimizer,trainloader,targetloader,interp,val_ds,test
                         vizviz[f'target_{src_cluster}'].append(None)
                         im_path =  str(config.exp_dir /  f'target_{src_cluster}_{i_iter}_{len(vizviz[f"target_{src_cluster}"])}.png')
                         if img.shape[0] == 3:
-                            plt.imsave(im_path,  np.array(img[1]), cmap='gray')
+                            plt.imsave(im_path,  np.array(img[1].detach().cpu()), cmap='gray')
                         else:
                             img = tensor_to_image(img)
                             img.save(im_path)
@@ -668,8 +671,10 @@ def train_clustering(model,optimizer,trainloader,targetloader,interp,val_ds,test
                 log_log['dist_loss'] = float(np.mean(epoch_dist_loss))
             wandb.log(log_log,step=i_iter)
 
-
-        model.get_bottleneck = False
+        if config.parallel_model:
+            model.module.get_bottleneck = False
+        else:
+            model.get_bottleneck = False
         after_step(i_iter,val_ds,test_ds,model,interp)
 def main():
     """Create the model and start the training."""
@@ -691,8 +696,12 @@ def main():
 
         ckpt_path = Path(config.base_res_path) / f'source_{args.source}' / 'pretrain' / 'best_model.pth'
         model.load_state_dict(torch.load(ckpt_path,map_location='cpu'))
-        optimizer = optim.SGD(model.parameters(),
-                              lr=config.lr, momentum=args.momentum, weight_decay=args.weight_decay)
+        if config.msm:
+            optimizer = optim.Adam(model.parameters(),
+                                  lr=config.lr, weight_decay=args.weight_decay)
+        else:
+            optimizer = optim.SGD(model.parameters(),
+                                  lr=config.lr, momentum=args.momentum, weight_decay=args.weight_decay)
     else:
         if args.exp_name != '':
             config.exp_dir = Path(config.base_res_path) /f'source_{args.source}' / args.exp_name
@@ -704,17 +713,19 @@ def main():
         for i in saved_state_dict:
             # Scale.layer5.conv2d_list.3.weight
             i_parts = i.split('.')
-            # print i_parts
             if not args.num_classes == 19 or not i_parts[1] == 'layer5':
                 new_params['.'.join(i_parts[1:])] = saved_state_dict[i]
-                # print i_parts
 
         nn1 = [x for x in new_params.keys() if x == 'conv1.weight' or 'layer5' in x]
         for x in nn1:
             new_params.pop(x)
         model.load_state_dict(new_params,strict=False)
-        optimizer = optim.SGD(model.optim_parameters(config),
-                              lr=config.lr, momentum=args.momentum, weight_decay=args.weight_decay)
+        if config.msm:
+            optimizer = optim.Adam(model.optim_parameters(config),
+                                  lr=config.lr, weight_decay=args.weight_decay)
+        else:
+            optimizer = optim.SGD(model.optim_parameters(config),
+                                  lr=config.lr, momentum=args.momentum, weight_decay=args.weight_decay)
     config.exp_dir.mkdir(parents=True,exist_ok=True)
     json.dump(dataclasses.asdict(config),open(config.exp_dir/'config.json','w'))
 
@@ -724,6 +735,8 @@ def main():
         args.gpu = 'cpu'
 
     model.to(args.gpu)
+    if config.parallel_model:
+        model = torch.nn.DataParallel(model, device_ids=[1, 0, 5])
     random.seed(RANDOM_SEED)
     np.random.seed(RANDOM_SEED)
     torch.manual_seed(RANDOM_SEED)
