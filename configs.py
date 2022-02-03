@@ -60,13 +60,13 @@ class MsmBaseConfig:
     msm = True
     n_channels= 3
     save_pred_every =  100
-    epoch_every = 100
-    num_steps = 1000
+    epoch_every = 250
+    num_steps = 2500
 
 @dataclass
 class MsmConfigFinetuneClustering(MsmBaseConfig):
-    n_clusters = 9
-    lr = 1e-5
+    n_clusters = 8
+    lr = 1e-4
     use_slice_num = True
     id_to_num_slices = '/home/dsi/shaya/id_to_num_slices_msm.json'
     source_batch_size = 4
