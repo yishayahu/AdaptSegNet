@@ -65,13 +65,13 @@ class MsmBaseConfig:
 
 @dataclass
 class MsmConfigFinetuneClustering(MsmBaseConfig):
-    n_clusters = 8
+    n_clusters = 12
     lr = 1e-4
     use_slice_num = True
     id_to_num_slices = '/home/dsi/shaya/id_to_num_slices_msm.json'
     source_batch_size = 4
     target_batch_size = 12
-    dist_loss_lambda = 0.1
+    dist_loss_lambda = 0.03
     parallel_model = True
 
 

@@ -645,7 +645,7 @@ def train_clustering(model,optimizer,trainloader,targetloader,interp,val_ds,test
             if accumulate_for_loss is not None:
                 use_dist_loss = False
                 lens1 = [len(x) for x in accumulate_for_loss]
-                if np.sum(lens1) > 35:
+                if np.sum(lens1) > 40:
                     use_dist_loss = True
                 if use_dist_loss:
                     for i,features in enumerate(accumulate_for_loss):
