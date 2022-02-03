@@ -34,7 +34,7 @@ from configs import *
 
 
 if True:
-    config = CC359ConfigFinetuneClustering()
+    config = MsmConfigFinetuneClustering()
 else:
     config = DebugConfigCC359()
 
@@ -579,7 +579,7 @@ def train_clustering(model,optimizer,trainloader,targetloader,interp,val_ds,test
 
             _, pred,features = model(images)
             features = features.mean(1).detach().cpu().numpy()
-            for id1,slc_num,feature in zip(ids,slice_nums,features):
+            for id1,slc_num,feature,img in zip(ids,slice_nums,features,images):
                 slice_to_feature_source[f'{id1}_{slc_num}'] = feature
                 if best_matchs is not None and f'{id1}_{slc_num}' in slice_to_cluster:
                     src_cluster = slice_to_cluster[f'{id1}_{slc_num}']
@@ -587,7 +587,7 @@ def train_clustering(model,optimizer,trainloader,targetloader,interp,val_ds,test
                         if f'source_{src_cluster}' not in vizviz:
                             vizviz[f'source_{src_cluster}'] = []
                         vizviz[f'source_{src_cluster}'].append(None)
-                        im_path =  config.exp_dir / f'source_{src_cluster}_{i_iter}_{len(vizviz[f"source_{src_cluster}"])}.png'
+                        im_path =  str(config.exp_dir / f'source_{src_cluster}_{i_iter}_{len(vizviz[f"source_{src_cluster}"])}.png')
                         if img.shape[0] == 3:
                             plt.imsave(im_path,  np.array(img[1]), cmap='gray')
                         else:
@@ -612,7 +612,7 @@ def train_clustering(model,optimizer,trainloader,targetloader,interp,val_ds,test
             _, __,features = model(images)
             features = features.mean(1)
             dist_loss = torch.tensor(0.0,device=args.gpu)
-            for id1,slc_num,feature in zip(ids,slice_nums,features):
+            for id1,slc_num,feature,img in zip(ids,slice_nums,features,images):
                 slice_to_feature_target[f'{id1}_{slc_num}'] = feature.detach().cpu().numpy()
                 if best_matchs is not None and  f'{id1}_{slc_num}' in slice_to_cluster:
                     if config.use_accumulate_for_loss:
@@ -624,7 +624,7 @@ def train_clustering(model,optimizer,trainloader,targetloader,interp,val_ds,test
                         if f'target_{src_cluster}' not in vizviz:
                             vizviz[f'target_{src_cluster}'] = []
                         vizviz[f'target_{src_cluster}'].append(None)
-                        im_path =  config.exp_dir /  f'target_{src_cluster}_{i_iter}_{len(vizviz[f"target_{src_cluster}"])}.png'
+                        im_path =  str(config.exp_dir /  f'target_{src_cluster}_{i_iter}_{len(vizviz[f"target_{src_cluster}"])}.png')
                         if img.shape[0] == 3:
                             plt.imsave(im_path,  np.array(img[1]), cmap='gray')
                         else:
@@ -643,7 +643,8 @@ def train_clustering(model,optimizer,trainloader,targetloader,interp,val_ds,test
                             dist_loss+= torch.mean(torch.abs(features - best_matchs[i].to(args.gpu)))
                             accumulate_for_loss[i] = []
             dist_loss*= dist_loss_lambda
-            epoch_dist_loss.append(float(dist_loss))
+            if float(dist_loss) > 0:
+                epoch_dist_loss.append(float(dist_loss))
             epoch_seg_loss.append(float(loss))
             losses_dict = {'seg_loss': loss,'dist_loss':dist_loss,'total':loss+dist_loss}
             if accumulate_for_loss is None:
@@ -661,9 +662,10 @@ def train_clustering(model,optimizer,trainloader,targetloader,interp,val_ds,test
                     optimizer.zero_grad()
                 else:
                     losses_dict['seg_loss'].backward(retain_graph=True)
-            log_log.update({'seg_loss':float(np.mean(epoch_seg_loss)),'dist_loss':float(np.mean(epoch_dist_loss))})
+            log_log['seg_loss'] = float(np.mean(epoch_seg_loss))
+            if epoch_dist_loss:
+                log_log['dist_loss'] = float(np.mean(epoch_dist_loss))
             wandb.log(log_log,step=i_iter)
-
 
 
         model.get_bottleneck = False
