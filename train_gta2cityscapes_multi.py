@@ -2,6 +2,7 @@ import argparse
 import dataclasses
 import json
 from pathlib import Path
+import PIL
 import matplotlib.cm as mplcm
 import matplotlib.colors as mplcolors
 import torch
@@ -33,13 +34,27 @@ from configs import *
 
 
 if True:
-    config = MsmConfigFinetuneClustering()
+    config = CC359ConfigFinetuneClustering()
 else:
     config = DebugConfigCC359()
 
+
+
+def tensor_to_image(tensor):
+    tensor = tensor*255
+    tensor = tensor.detach().cpu()
+    tensor = np.array(tensor, dtype=np.uint8)
+    if np.ndim(tensor)>3:
+        assert tensor.shape[0] == 1
+        tensor = tensor[0]
+    if tensor.shape[0] == 1:
+        tensor = tensor.squeeze()
+    else:
+        assert False
+    return PIL.Image.fromarray(tensor)
 MODEL = 'DeepLab'
 ITER_SIZE = 1
-NUM_WORKERS = 4
+NUM_WORKERS = 0
 IGNORE_LABEL = 255
 MOMENTUM = 0.9
 NUM_CLASSES = 2
@@ -443,8 +458,6 @@ def train_clustering(model,optimizer,trainloader,targetloader,interp,val_ds,test
         model.get_bottleneck = True
         model.train()
         if i_iter % config.epoch_every == 0 and i_iter != 0:
-            epoch_seg_loss = []
-            epoch_dist_loss = []
             source_clusters = []
             target_clusters = []
             if config.use_accumulate_for_loss:
@@ -548,10 +561,11 @@ def train_clustering(model,optimizer,trainloader,targetloader,interp,val_ds,test
             plt.clf()
             slice_to_feature_source = {}
             slice_to_feature_target = {}
+            vizviz = {}
             log_log = {f'figs/source': wandb.Image(im_path_source),f'figs/target': wandb.Image(im_path_target),f'figs/cluster': wandb.Image(im_path_clusters)}
             wandb.log(log_log,step=i_iter)
         loss_seg_value = 0
-
+        log_log = {}
         adjust_learning_rate(optimizer, i_iter)
         for sub_i in range(args.iter_size):
             try:
@@ -567,6 +581,19 @@ def train_clustering(model,optimizer,trainloader,targetloader,interp,val_ds,test
             features = features.mean(1).detach().cpu().numpy()
             for id1,slc_num,feature in zip(ids,slice_nums,features):
                 slice_to_feature_source[f'{id1}_{slc_num}'] = feature
+                if best_matchs is not None and f'{id1}_{slc_num}' in slice_to_cluster:
+                    src_cluster = slice_to_cluster[f'{id1}_{slc_num}']
+                    if f'source_{src_cluster}' not in vizviz or len(vizviz[f'source_{src_cluster}']) < 4:
+                        if f'source_{src_cluster}' not in vizviz:
+                            vizviz[f'source_{src_cluster}'] = []
+                        vizviz[f'source_{src_cluster}'].append(None)
+                        im_path =  config.exp_dir / f'source_{src_cluster}_{i_iter}_{len(vizviz[f"source_{src_cluster}"])}.png'
+                        if img.shape[0] == 3:
+                            plt.imsave(im_path,  np.array(img[1]), cmap='gray')
+                        else:
+                            img = tensor_to_image(img)
+                            img.save(im_path)
+                        log_log[f'{src_cluster}/source_{len(vizviz[f"source_{src_cluster}"])}'] = wandb.Image(im_path)
             pred = interp(pred)
             loss_seg = loss_calc(pred, labels, args.gpu)
             loss = loss_seg
@@ -592,10 +619,22 @@ def train_clustering(model,optimizer,trainloader,targetloader,interp,val_ds,test
                         accumulate_for_loss[slice_to_cluster[f'{id1}_{slc_num}']].append(feature)
                     else:
                         dist_loss+= torch.mean(torch.abs(feature - best_matchs[slice_to_cluster[f'{id1}_{slc_num}']].to(args.gpu)))
+                    src_cluster = best_matchs_indexes[slice_to_cluster[f'{id1}_{slc_num}']]
+                    if f'target_{src_cluster}' not in vizviz or len(vizviz[f'target_{src_cluster}']) < 4:
+                        if f'target_{src_cluster}' not in vizviz:
+                            vizviz[f'target_{src_cluster}'] = []
+                        vizviz[f'target_{src_cluster}'].append(None)
+                        im_path =  config.exp_dir /  f'target_{src_cluster}_{i_iter}_{len(vizviz[f"target_{src_cluster}"])}.png'
+                        if img.shape[0] == 3:
+                            plt.imsave(im_path,  np.array(img[1]), cmap='gray')
+                        else:
+                            img = tensor_to_image(img)
+                            img.save(im_path)
+                        log_log[f'{src_cluster}/target_{len(vizviz[f"target_{src_cluster}"])}'] = wandb.Image(im_path)
             if accumulate_for_loss is not None:
                 use_dist_loss = False
                 lens1 = [len(x) for x in accumulate_for_loss]
-                if np.sum(lens1) > 25:
+                if np.sum(lens1) > 35:
                     use_dist_loss = True
                 if use_dist_loss:
                     for i,features in enumerate(accumulate_for_loss):
@@ -622,7 +661,8 @@ def train_clustering(model,optimizer,trainloader,targetloader,interp,val_ds,test
                     optimizer.zero_grad()
                 else:
                     losses_dict['seg_loss'].backward(retain_graph=True)
-            wandb.log({'seg_loss':float(np.mean(epoch_seg_loss)),'dist_loss':float(np.mean(epoch_dist_loss))},step=i_iter)
+            log_log.update({'seg_loss':float(np.mean(epoch_seg_loss)),'dist_loss':float(np.mean(epoch_dist_loss))})
+            wandb.log(log_log,step=i_iter)
 
 
 
@@ -697,8 +737,8 @@ def main():
         id=wandb.util.generate_id(),
         name=args.mode + str(args.source) + '_' + str(args.target),
     )
-    trainloader = data.DataLoader(source_ds,batch_size=config.source_batch_size, shuffle=True, num_workers=args.num_workers)
-    targetloader = data.DataLoader(target_ds, batch_size=config.target_batch_size, shuffle=True, num_workers=args.num_workers)
+    trainloader = data.DataLoader(source_ds,batch_size=config.source_batch_size, shuffle=True, num_workers=args.num_workers,pin_memory=True)
+    targetloader = data.DataLoader(target_ds, batch_size=config.target_batch_size, shuffle=True, num_workers=args.num_workers,pin_memory=True)
     # implement model.optim_parameters(args) to handle different models' lr setting
 
 
