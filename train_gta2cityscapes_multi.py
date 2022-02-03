@@ -456,6 +456,13 @@ def train_clustering(model,optimizer,trainloader,targetloader,interp,val_ds,test
     epoch_dist_loss = []
     optimizer.zero_grad()
     for i_iter in tqdm(range(config.num_steps)):
+        if i_iter == 0:
+            if config.parallel_model:
+                model.module.get_bottleneck = False
+            else:
+                model.get_bottleneck = False
+            after_step(i_iter,val_ds,test_ds,model,interp)
+            continue
         if config.parallel_model:
             model.module.get_bottleneck = True
         else:
@@ -736,10 +743,11 @@ def main():
 
     model.to(args.gpu)
     if config.parallel_model:
-        model = torch.nn.DataParallel(model, device_ids=[1, 0, 5])
+        model = torch.nn.DataParallel(model, device_ids=[1, 2, 5])
     random.seed(RANDOM_SEED)
     np.random.seed(RANDOM_SEED)
     torch.manual_seed(RANDOM_SEED)
+    torch.cuda.manual_seed_all(RANDOM_SEED)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
     if config.msm:
