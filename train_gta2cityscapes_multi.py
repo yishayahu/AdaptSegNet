@@ -688,8 +688,8 @@ def main():
     if not torch.cuda.is_available():
         print('training on cpu')
         args.gpu = 'cpu'
-
     model.to(args.gpu)
+    model = torch.nn.DataParallel(model, device_ids=[1, 0, 4, 6])
     random.seed(RANDOM_SEED)
     np.random.seed(RANDOM_SEED)
     torch.manual_seed(RANDOM_SEED)
