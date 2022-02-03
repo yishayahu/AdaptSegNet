@@ -1,8 +1,6 @@
 import argparse
 import dataclasses
 import json
-from dataclasses import dataclass
-from functools import partial
 from pathlib import Path
 import matplotlib.cm as mplcm
 import matplotlib.colors as mplcolors
@@ -15,15 +13,10 @@ from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 from torch.utils import data, model_zoo
 import numpy as np
-import pickle
 from torch.autograd import Variable
 import torch.optim as optim
-import scipy.misc
 import torch.backends.cudnn as cudnn
 import torch.nn.functional as F
-import sys
-import os
-import os.path as osp
 import matplotlib.pyplot as plt
 import random
 from dpipe.io import load
@@ -38,10 +31,9 @@ from utils.loss import CrossEntropy2d, freeze_model
 from configs import *
 
 if True:
-    config = MsmConfig()
+    config = MsmConfigFinetuneClustering()
 else:
-    config = DebugConfig()
-IMG_MEAN = np.array((104.00698793, 116.66876762, 122.67891434), dtype=np.float32)
+    config = DebugConfigCC359()
 
 MODEL = 'DeepLab'
 ITER_SIZE = 1
@@ -175,19 +167,24 @@ def after_step(num_step,val_ds,test_ds,model,interp):
 
             torch.save(model.state_dict(), config.exp_dir / f'best_model.pth')
         torch.save(model.state_dict(), config.exp_dir / f'model.pth')
-    if num_step  == config.num_steps - 1:
+    if num_step  == config.num_steps - 1 or num_step == 0:
+        title = 'end' if num_step != 0 else 'start'
+        scores = {}
         if config.msm:
             sdice_test = get_dice(model,test_ds,args.gpu,config,interp)
         else:
             sdice_test = get_sdice(model,test_ds,args.gpu,config,interp)
-        model.load_state_dict(torch.load(config.exp_dir / f'best_model.pth',map_location='cpu'))
-        if config.msm:
-            sdice_test_best = get_dice(model,test_ds,args.gpu,config,interp)
-        else:
-            sdice_test_best =get_sdice(model,test_ds,args.gpu,config,interp)
-        scores = {f'{metric}/test':sdice_test,f'{metric}/test_best':sdice_test_best}
+        scores[f'{metric}_{title}/test'] = sdice_test
+        if num_step != 0:
+            model.load_state_dict(torch.load(config.exp_dir / f'best_model.pth',map_location='cpu'))
+            if config.msm:
+                sdice_test_best = get_dice(model,test_ds,args.gpu,config,interp)
+            else:
+                sdice_test_best =get_sdice(model,test_ds,args.gpu,config,interp)
+            scores[f'{metric}_{title}/test_best'] = sdice_test_best
+
         wandb.log(scores,step=num_step)
-        json.dump(scores,open(config.exp_dir/'scores.json','w'))
+        json.dump(scores,open(config.exp_dir/f'scores_{title}.json','w'))
 
 def train_their(model,optimizer,trainloader,targetloader,interp,interp_target,val_ds,test_ds):
     trainloader_iter = iter(trainloader)
@@ -422,7 +419,7 @@ def train_clustering(model,optimizer,trainloader,targetloader,interp,val_ds,test
     targetloader.dataset.yield_id = True
     trainloader_iter = iter(trainloader)
     targetloader_iter = iter(targetloader)
-    dist_loss_lambda = 0.1
+    dist_loss_lambda = config.dist_loss_lambda
     n_clusters = config.n_clusters
     slice_to_cluster = None
     source_clusters = None
@@ -479,12 +476,10 @@ def train_clustering(model,optimizer,trainloader,targetloader,interp,val_ds,test
             points = t.fit_transform(points)
             source_points,target_points = points[:len(slice_to_feature_source)],points[len(slice_to_feature_source):]
             # source_points,target_points = points[:max(len(slice_to_feature_source),n_clusters)],points[-max(len(slice_to_feature_target),n_clusters):]
-            k = KMeans(n_clusters=n_clusters,random_state=42)
-            k.fit(points)
-            k1 = KMeans(n_clusters=n_clusters,random_state=42,init=k.cluster_centers_)
+            k1 = KMeans(n_clusters=n_clusters,random_state=42)
             print('doing kmean 1')
             sc = k1.fit_predict(source_points)
-            k2 = KMeans(n_clusters=n_clusters,random_state=42,init=k.cluster_centers_)
+            k2 = KMeans(n_clusters=n_clusters,random_state=42,init=k1.cluster_centers_)
             print('doing kmean 2')
             tc = k2.fit_predict(target_points)
             print('getting best match')
@@ -713,8 +708,8 @@ def main():
         id=wandb.util.generate_id(),
         name=args.mode + str(args.source) + '_' + str(args.target),
     )
-    trainloader = data.DataLoader(source_ds,batch_size=config.batch_size, shuffle=True, num_workers=args.num_workers)
-    targetloader = data.DataLoader(target_ds, batch_size=config.batch_size, shuffle=True, num_workers=args.num_workers)
+    trainloader = data.DataLoader(source_ds,batch_size=config.source_batch_size, shuffle=True, num_workers=args.num_workers)
+    targetloader = data.DataLoader(target_ds, batch_size=config.target_batch_size, shuffle=True, num_workers=args.num_workers)
     # implement model.optim_parameters(args) to handle different models' lr setting
 
 
