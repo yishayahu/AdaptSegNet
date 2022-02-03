@@ -33,7 +33,7 @@ def dice(gt,pred):
     return (2*np.sum(g*p))/(np.sum(g)+np.sum(p))
 
 def get_sdice(model,ds,device,config,interp):
-    loader= data.DataLoader(ds,batch_size=config.batch_size, shuffle=False)
+    loader= data.DataLoader(ds,batch_size=config.target_batch_size, shuffle=False)
     model.eval()
     sdice_for_id={}
     with torch.no_grad():
