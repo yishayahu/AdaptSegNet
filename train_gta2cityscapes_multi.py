@@ -33,7 +33,7 @@ from configs import *
 
 
 if True:
-    config = CC359ConfigFinetuneClustering()
+    config = MsmConfigFinetuneClustering()
 else:
     config = DebugConfigCC359()
 
@@ -478,12 +478,10 @@ def train_clustering(model,optimizer,trainloader,targetloader,interp,val_ds,test
             points = t.fit_transform(points)
             source_points,target_points = points[:len(slice_to_feature_source)],points[len(slice_to_feature_source):]
             # source_points,target_points = points[:max(len(slice_to_feature_source),n_clusters)],points[-max(len(slice_to_feature_target),n_clusters):]
-            k = KMeans(n_clusters=n_clusters,random_state=42)
-            k.fit(points)
-            k1 = KMeans(n_clusters=n_clusters,random_state=42,init=k.cluster_centers_)
+            k1 = KMeans(n_clusters=n_clusters,random_state=42)
             print('doing kmean 1')
             sc = k1.fit_predict(source_points)
-            k2 = KMeans(n_clusters=n_clusters,random_state=42,init=k.cluster_centers_)
+            k2 = KMeans(n_clusters=n_clusters,random_state=42,init=k1.cluster_centers_)
             print('doing kmean 2')
             tc = k2.fit_predict(target_points)
             print('getting best match')
