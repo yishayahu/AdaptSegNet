@@ -694,7 +694,11 @@ def main():
         optimizer = optim.SGD(model.parameters(),
                               lr=config.lr, momentum=args.momentum, weight_decay=args.weight_decay)
     else:
-        config.exp_dir = Path(config.base_res_path) /f'source_{args.source}' / args.mode
+        if args.exp_name != '':
+            config.exp_dir = Path(config.base_res_path) /f'source_{args.source}' / args.exp_name
+        else:
+            config.exp_dir = Path(config.base_res_path) /f'source_{args.source}' / args.mode
+
         saved_state_dict = model_zoo.load_url('http://vllab.ucmerced.edu/ytsai/CVPR18/DeepLab_resnet_pretrained_init-f81d91e8.pth')
         new_params = model.state_dict().copy()
         for i in saved_state_dict:

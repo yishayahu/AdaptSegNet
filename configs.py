@@ -16,7 +16,9 @@ class CC359BaseConfig:
     epoch_every = 1000
     num_steps = 10000
 
-
+@dataclass
+class AdabnCC359Config(CC359BaseConfig):
+    batch_size = 16
 
 
 @dataclass
