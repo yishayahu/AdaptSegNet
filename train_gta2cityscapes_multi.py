@@ -702,7 +702,12 @@ def main():
             config.exp_dir = Path(config.base_res_path) /f'source_{args.source}_target_{args.target}' /  args.mode
 
         ckpt_path = Path(config.base_res_path) / f'source_{args.source}' / 'pretrain' / 'best_model.pth'
-        model.load_state_dict(torch.load(ckpt_path,map_location='cpu'))
+        state_dict = torch.load(ckpt_path,map_location='cpu')
+        new_state_dict = {}
+        for k, v in state_dict.items():
+            k = k.replace('module.', '')
+            new_state_dict[k]=v
+        model.load_state_dict(new_state_dict)
         if config.msm:
             optimizer = optim.Adam(model.parameters(),
                                   lr=config.lr, weight_decay=args.weight_decay)

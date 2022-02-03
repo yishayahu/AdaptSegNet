@@ -18,6 +18,7 @@ from metric_utils import get_dice,get_sdice
 from dataset.cc359_dataset import CC359Ds
 from dataset.msm_dataset import MultiSiteMri
 from model.deeplab_multi import DeeplabMulti
+from model.unet import UNet2D
 from utils.loss import CrossEntropy2d
 
 
@@ -35,8 +36,13 @@ def loss_calc(pred, label, gpu):
 def run_adaBN(source, target, device):
     metric = 'dice' if config.msm else 'sdice'
     ckpt_path = Path(config.base_res_path) / f'source_{source}' / 'pretrain' / 'best_model.pth'
-    model = DeeplabMulti(num_classes=2,n_channels=config.n_channels)
-    model.load_state_dict(torch.load(ckpt_path,map_location='cpu'))
+    model = UNet2D(config.n_channels)
+    state_dict = torch.load(ckpt_path,map_location='cpu')
+    new_state_dict = {}
+    for k, v in state_dict.items():
+        k = k.replace('module.', '')
+        new_state_dict[k]=v
+    model.load_state_dict(new_state_dict)
 
     for m in model.modules():
         if isinstance(m, nn.BatchNorm2d):
@@ -61,9 +67,8 @@ def run_adaBN(source, target, device):
                 images = torch.tensor(images.to(device))
 
                 pred1, pred2 = model(images)
-                pred1 = interp(pred1)
                 pred2 = interp(pred2)
-                first_pred.append(float(pred1[0][0][0][0]))
+                first_pred.append(float(pred2[0][0][0][0]))
 
                 # loss_seg1 = loss_calc(pred1, labels, args.gpu)
     print(np.mean(first_pred))
@@ -98,6 +103,6 @@ def main():
 
 
 if __name__ == '__main__':
-    config = MsmConfig()
+    config = AdabnMsmConfig()
     main()
 

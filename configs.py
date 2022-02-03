@@ -100,6 +100,9 @@ class DebugMsm(MsmBaseConfig):
     epoch_every = 20
     num_steps = 50
 
+@dataclass
+class AdabnMsmConfig(MsmBaseConfig):
+    batch_size = 16
 
 
 
