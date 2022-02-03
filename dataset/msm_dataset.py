@@ -17,9 +17,10 @@ cudnn.benchmark = True
 
 
 class MultiSiteMri(torch.utils.data.Dataset):
-    def __init__(self, ids,yield_id=False):
+    def __init__(self, ids,yield_id=False,test=False):
         self.yield_id  = yield_id
         self.patches_Allimages, self.patches_Allmasks = self.create_datalists(ids)
+        self.test = test
 
 
     def load_image(self,id1):
@@ -73,11 +74,15 @@ class MultiSiteMri(torch.utils.data.Dataset):
         z = []
         min1 = np.min(limZ)
         max1 = np.max(limZ)
-        for i in range(1, mask.shape[2] - 2):
-            if min1 <= i < max1:
+        if self.test:
+            for i in range(1, mask.shape[2] - 2):
                 z.append(i)
-            elif np.random.random()< 0.1:
-                z.append(i)
+        else:
+            for i in range(1, mask.shape[2] - 2):
+                if min1 <= i < max1:
+                    z.append(i)
+                elif np.random.random()< 0.1:
+                    z.append(i)
         num_patches = len(z)
 
 

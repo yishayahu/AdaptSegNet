@@ -35,7 +35,7 @@ from configs import *
 
 
 if True:
-    config = CC359ConfigPretrain()
+    config = MsmConfigFinetuneClustering()
 else:
     config = DebugConfigCC359()
 
@@ -372,8 +372,8 @@ def train_their(model,optimizer,trainloader,targetloader,interp,interp_target,va
         after_step(i_iter,interp=interp,model =model,val_ds=val_ds,test_ds=test_ds)
 def train_pretrain(model,optimizer,trainloader,interp):
     if config.msm:
-        val_ds = MultiSiteMri(load(f'{config.base_splits_path}/site_{args.source}t/val_ids.json'),yield_id=True)
-        test_ds = MultiSiteMri(load(f'{config.base_splits_path}/site_{args.source}t/test_ids.json'),yield_id=True)
+        val_ds = MultiSiteMri(load(f'{config.base_splits_path}/site_{args.source}t/val_ids.json'),yield_id=True,test=True)
+        test_ds = MultiSiteMri(load(f'{config.base_splits_path}/site_{args.source}t/test_ids.json'),yield_id=True,test=True)
     else:
         val_ds = CC359Ds(load(f'{config.base_splits_path}/site_{args.source}/val_ids.json'),yield_id=True,slicing_interval=1)
         test_ds = CC359Ds(load(f'{config.base_splits_path}/site_{args.source}/test_ids.json'),yield_id=True,slicing_interval=1)
@@ -760,8 +760,8 @@ def main():
         assert args.source == args.target
         source_ds = MultiSiteMri(load(f'{config.base_splits_path}/site_{args.source}t/train_ids.json'))
         target_ds = MultiSiteMri(load(f'{config.base_splits_path}/site_{args.target}/train_ids.json'))
-        val_ds = MultiSiteMri(load(f'{config.base_splits_path}/site_{args.target}/val_ids.json'),yield_id=True)
-        test_ds = MultiSiteMri(load(f'{config.base_splits_path}/site_{args.target}/test_ids.json'),yield_id=True)
+        val_ds = MultiSiteMri(load(f'{config.base_splits_path}/site_{args.target}/val_ids.json'),yield_id=True,test=True)
+        test_ds = MultiSiteMri(load(f'{config.base_splits_path}/site_{args.target}/test_ids.json'),yield_id=True,test=True)
         project = 'adaptSegUNetMsm'
     else:
         source_ds = CC359Ds(load(f'{config.base_splits_path}/site_{args.source}/train_ids.json')[:config.data_len])

@@ -50,7 +50,7 @@ def run_adaBN(source, target, device):
     model.to(device)
     if config.msm:
         target_ds = MultiSiteMri(load(f'{config.base_splits_path}/site_{target}/train_ids.json'))
-        test_ds = MultiSiteMri(load(f'{config.base_splits_path}/site_{target}/test_ids.json'))
+        test_ds = MultiSiteMri(load(f'{config.base_splits_path}/site_{target}/test_ids.json'),test=True)
         epochs = 10
     else:
         target_ds = CC359Ds(load(f'{config.base_splits_path}/site_{target}/train_ids.json'))

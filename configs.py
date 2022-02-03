@@ -26,7 +26,7 @@ class AdabnCC359Config(CC359BaseConfig):
 class CC359ConfigPretrain(CC359BaseConfig):
     source_batch_size = 16
     target_batch_size = 1
-    lr = 1e-4
+    lr = 1e-3
 
 @dataclass
 class CC359ConfigFinetuneClustering(CC359BaseConfig):
@@ -72,7 +72,7 @@ class MsmBaseConfig:
 
 @dataclass
 class MsmPretrainConfig(MsmBaseConfig):
-    lr = 1e-4
+    lr = 1e-3
     source_batch_size = 16
     target_batch_size = 1
     parallel_model = True
