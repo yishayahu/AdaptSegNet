@@ -34,7 +34,7 @@ from configs import *
 
 
 if True:
-    config = MsmConfigFinetuneClustering()
+    config = CC359ConfigFinetuneClustering()
 else:
     config = DebugConfigCC359()
 
@@ -129,6 +129,7 @@ def get_arguments():
                         help="choose adaptation set.")
     parser.add_argument("--gan", type=str, default=GAN,
                         help="choose the GAN objective.")
+    parser.add_argument('--exp_name',default='')
     return parser.parse_args()
 
 
@@ -683,7 +684,10 @@ def main():
     model = DeeplabMulti(num_classes=args.num_classes,n_channels=config.n_channels)
 
     if args.mode != 'pretrain':
-        config.exp_dir = Path(config.base_res_path) /f'source_{args.source}_target_{args.target}' / args.mode
+        if args.exp_name != '':
+            config.exp_dir = Path(config.base_res_path) /f'source_{args.source}_target_{args.target}' /  args.exp_name
+        else:
+            config.exp_dir = Path(config.base_res_path) /f'source_{args.source}_target_{args.target}' /  args.mode
 
         ckpt_path = Path(config.base_res_path) / f'source_{args.source}' / 'pretrain' / 'best_model.pth'
         model.load_state_dict(torch.load(ckpt_path,map_location='cpu'))
@@ -734,14 +738,20 @@ def main():
         val_ds = CC359Ds(load(f'{config.base_splits_path}/site_{args.target}/val_ids.json'),yield_id=True,slicing_interval=1)
         test_ds = CC359Ds(load(f'{config.base_splits_path}/site_{args.target}/test_ids.json'),yield_id=True,slicing_interval=1)
         project = 'adaptSegNet'
-    wandb.init(
-        project=project,
-        id=wandb.util.generate_id(),
-        name=args.mode + str(args.source) + '_' + str(args.target),
-    )
+    if config.debug:
+        wandb.init(
+            project='spot3',
+            id=wandb.util.generate_id(),
+            name=args.exp_name,
+        )
+    else:
+        wandb.init(
+            project=project,
+            id=wandb.util.generate_id(),
+            name=args.exp_name,
+        )
     trainloader = data.DataLoader(source_ds,batch_size=config.source_batch_size, shuffle=True, num_workers=args.num_workers,pin_memory=True)
     targetloader = data.DataLoader(target_ds, batch_size=config.target_batch_size, shuffle=True, num_workers=args.num_workers,pin_memory=True)
-    # implement model.optim_parameters(args) to handle different models' lr setting
 
 
     optimizer.zero_grad()
