@@ -438,11 +438,12 @@ def train_clustering(model,optimizer,trainloader,targetloader,interp,val_ds,test
     epoch_dist_loss = []
     optimizer.zero_grad()
     for i_iter in tqdm(range(config.num_steps)):
-        model.get_bottleneck = True
+        if config.parallel_model:
+            model.module.get_bottleneck = True
+        else:
+            model.get_bottleneck = True
         model.train()
         if i_iter % config.epoch_every == 0 and i_iter != 0:
-            epoch_seg_loss = []
-            epoch_dist_loss = []
             source_clusters = []
             target_clusters = []
             if config.use_accumulate_for_loss:
@@ -620,11 +621,13 @@ def train_clustering(model,optimizer,trainloader,targetloader,interp,val_ds,test
                     optimizer.zero_grad()
                 else:
                     losses_dict['seg_loss'].backward(retain_graph=True)
-            wandb.log({'seg_loss':float(np.mean(epoch_seg_loss)),'dist_loss':float(np.mean(epoch_dist_loss))},step=i_iter)
+            if i_iter % 20 ==0:
+                wandb.log({'seg_loss':float(np.mean(epoch_seg_loss)),'dist_loss':float(np.mean(epoch_dist_loss))},step=i_iter)
 
-
-
-        model.get_bottleneck = False
+        if config.parallel_model:
+            model.module.get_bottleneck = False
+        else:
+            model.get_bottleneck = False
         after_step(i_iter,val_ds,test_ds,model,interp)
 def main():
     """Create the model and start the training."""
@@ -684,7 +687,8 @@ def main():
         print('training on cpu')
         args.gpu = 'cpu'
     model.to(args.gpu)
-    model = torch.nn.DataParallel(model, device_ids=[1, 0, 4, 6])
+    if config.parallel_model:
+        model = torch.nn.DataParallel(model, device_ids=[1, 0, 3, 5])
     random.seed(RANDOM_SEED)
     np.random.seed(RANDOM_SEED)
     torch.manual_seed(RANDOM_SEED)

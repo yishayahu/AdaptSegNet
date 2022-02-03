@@ -44,10 +44,6 @@ class DebugConfigCC359(CC359BaseConfig):
 
 
 
-
-
-
-
 @dataclass
 class MsmBaseConfig:
     use_accumulate_for_loss = True
@@ -65,12 +61,13 @@ class MsmBaseConfig:
 @dataclass
 class MsmConfigFinetuneClustering(MsmBaseConfig):
     n_clusters = 9
-    lr = 1e-5
+    lr = 1e-7
     use_slice_num = True
     id_to_num_slices = '/home/dsi/shaya/id_to_num_slices_msm.json'
     source_batch_size = 4
     target_batch_size = 12
-
+    dist_loss_lambda = 0.1
+    parallel_model = True
 
 
 @dataclass
@@ -79,8 +76,8 @@ class DebugMsm(MsmBaseConfig):
     source_batch_size = 2
     target_batch_size = 2
     lr = 1e-5
-    save_pred_every =  5
-    debug= True
+    save_pred_every = 5
+    debug = True
     epoch_every = 20
     num_steps = 50
 
