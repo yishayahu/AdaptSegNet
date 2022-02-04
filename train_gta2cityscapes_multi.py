@@ -695,13 +695,15 @@ def main():
         else:
             config.exp_dir = Path(config.base_res_path) /f'source_{args.source}_target_{args.target}' /  args.mode
 
-        ckpt_path = Path(config.base_res_path) / f'source_{args.source}_target_{args.target}' / 'adaBN' / 'model.pth'
+        ckpt_path = Path(config.base_res_path) / f'source_{args.source}' / 'pretrain' / 'best_model.pth'
         state_dict = torch.load(ckpt_path,map_location='cpu')
-        new_state_dict = {}
-        for k, v in state_dict.items():
-            k = k.replace('module.', '')
-            new_state_dict[k]=v
-        model.load_state_dict(new_state_dict)
+        if config.msm:
+            new_state_dict = {}
+            for k, v in state_dict.items():
+                k = k.replace('module.', '')
+                new_state_dict[k]=v
+            state_dict = new_state_dict
+        model.load_state_dict(state_dict)
         if config.msm:
             optimizer = optim.Adam(model.parameters(),
                                   lr=config.lr, weight_decay=args.weight_decay)
@@ -714,18 +716,6 @@ def main():
         else:
             config.exp_dir = Path(config.base_res_path) /f'source_{args.source}' / args.mode
 
-        # saved_state_dict = model_zoo.load_url('http://vllab.ucmerced.edu/ytsai/CVPR18/DeepLab_resnet_pretrained_init-f81d91e8.pth')
-        # new_params = model.state_dict().copy()
-        # for i in saved_state_dict:
-        #     # Scale.layer5.conv2d_list.3.weight
-        #     i_parts = i.split('.')
-        #     if not args.num_classes == 19 or not i_parts[1] == 'layer5':
-        #         new_params['.'.join(i_parts[1:])] = saved_state_dict[i]
-        #
-        # nn1 = [x for x in new_params.keys() if x == 'conv1.weight' or 'layer5' in x]
-        # for x in nn1:
-        #     new_params.pop(x)
-        # model.load_state_dict(new_params,strict=False)
         if config.msm:
             optimizer = optim.Adam(model.parameters(),
                                    lr=config.lr, weight_decay=args.weight_decay)
