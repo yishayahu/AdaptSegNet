@@ -26,11 +26,11 @@ class AdabnCC359Config(CC359BaseConfig):
 class CC359ConfigTheir(CC359BaseConfig):
     source_batch_size = 8
     target_batch_size = 8
-    num_steps = 5000
+    num_steps = 7500
     lr = 1e-4
     sched = True
     sched_gamma = 0.1
-    milestones = [3500]
+    milestones = [3500,5000,6500]
 
 @dataclass
 class CC359ConfigPretrain(CC359BaseConfig):
@@ -47,15 +47,15 @@ class CC359ConfigFinetuneClustering(CC359BaseConfig):
     source_batch_size = 4
     target_batch_size = 12
     n_clusters = 12
-    num_steps = 5000
-    lr = 1e-5
+    num_steps = 7500
+    lr = 1e-4
     use_slice_num = True
     id_to_num_slices = '/home/dsi/shaya/id_to_num_slices.json'
     dist_loss_lambda = 0.1
     sched = True
     sched_gamma = 0.1
     acc_amount = 40
-    milestones = [3500]
+    milestones = [3500,5000,6500]
 
 @dataclass
 class DebugConfigCC359(CC359BaseConfig):

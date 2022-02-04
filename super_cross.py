@@ -28,7 +28,7 @@ from configs import *
 def find_available_device(my_devices, running_now):
     if torch.cuda.is_available():
 
-        wanted_free_mem = 26 * 2 ** 30  # at least 16 GB avail
+        wanted_free_mem = 26 * 2 ** 30  # at least 26 GB avail
         while True:
             for device_num in range(nvmlDeviceGetCount()):
                 if device_num in my_devices:
@@ -50,16 +50,10 @@ def run_single_exp(exp, device, source, target, scores_path, my_devices, ret_val
     my_devices.append(device)
     print(f'training on source {source} target {target} exp {exp} on device {device} my devices is {my_devices}')
     with tempfile.NamedTemporaryFile() as out_file, tempfile.NamedTemporaryFile() as err_file:
-        global config
         try:
             if 'adaBN' in exp:
                 cmd = f'python adaBN.py --device cuda:{device} --source {source} --target {target} >  {out_file.name} 2> {err_file.name}'
             else:
-                if 'their' in exp:
-                    config = CC359ConfigTheir()
-                else:
-                    assert 'clustering_finetune' in exp
-                    config = CC359ConfigFinetuneClustering
                 cmd = f'python train_gta2cityscapes_multi.py  --gpu {device}  --source {source} --target {target} --mode {exp}>  {out_file.name} 2> {err_file.name}'
             print(cmd)
             subprocess.run(cmd, shell=True, check=True)
@@ -96,9 +90,11 @@ def run_cross_validation(experiments, combs, only_stats=False):
                     continue
                 curr_device = find_available_device(my_devices, running_now)
                 print(f'training on source {source} to create {src_ckpt_path}')
+                cmd = f'python train_gta2cityscapes_multi.py --source {source} --target {target} --mode pretrain --gpu {curr_device} >  errs_and_outs/pretrain{source}_logs_out.txt 2> errs_and_outs/pretarin{source}_logs_err.txt'
+                print(cmd)
                 my_devices.append(curr_device)
                 subprocess.run(
-                    f'python train_gta2cityscapes_multi.py --source {source} --target {target} --mode pretrain --gpu {curr_device} >  errs_and_outs/pretrain{source}_logs_out.txt 2> errs_and_outs/pretarin{source}_logs_err.txt',
+                    cmd,
                     shell=True, check=True)
                 my_devices.remove(curr_device)
             scores_path = f'{base_res_dir}/source_{source}_target_{target}/{exp}/scores.json'
@@ -145,13 +141,14 @@ def run_cross_validation(experiments, combs, only_stats=False):
 
 
 def main():
-
     experiments = ['adaBN','clustering_finetune','their']
     combs = list(itertools.permutations(range(6), 2))
     random.shuffle(combs)
+    combs = [(0, 2), (0, 4), (3, 1), (2, 5), (2, 3)]
     run_cross_validation(only_stats=False, experiments=experiments, combs=combs)
 
 
 if __name__ == '__main__':
+
     config = CC359BaseConfig()
     main()

@@ -34,8 +34,7 @@ from configs import *
 
 
 
-if 'config' not in globals():
-    config = MsmConfigFinetuneClustering()
+
 
 
 
@@ -125,10 +124,27 @@ def get_arguments():
     parser.add_argument("--gan", type=str, default=GAN,
                         help="choose the GAN objective.")
     parser.add_argument('--exp_name',default='')
+    parser.add_argument('--msm',action='store_true')
     return parser.parse_args()
 
 
 args = get_arguments()
+if args.msm:
+    if args.mode == 'clustering_finetune':
+        config = MsmConfigFinetuneClustering()
+    elif args.mode == 'pretrain':
+        config = MsmPretrainConfig()
+    else:
+        assert args.mode == 'their'
+        raise NotImplemented()
+else:
+    if args.mode == 'clustering_finetune':
+        config = CC359ConfigFinetuneClustering()
+    elif args.mode == 'pretrain':
+        config = CC359ConfigPretrain()
+    else:
+        assert args.mode == 'their'
+        config = CC359ConfigTheir()
 best_sdice = -1
 
 def loss_calc(pred, label, gpu):
@@ -203,6 +219,8 @@ def train_their(model,optimizer,scheduler,trainloader,targetloader,val_ds,test_d
     trainloader_iter = iter(trainloader)
     targetloader_iter = iter(targetloader)
     bce_loss = torch.nn.BCEWithLogitsLoss()
+    # interp = nn.Upsample(size=(config.input_size[1], config.input_size[0]), mode='bilinear')
+    # interp_target = nn.Upsample(size=(config.input_size[1], config.input_size[0]), mode='bilinear')
     # init D
     model_D1 = FCDiscriminator(num_classes=args.num_classes)
     model_D2 = FCDiscriminator(num_classes=args.num_classes)
@@ -220,6 +238,11 @@ def train_their(model,optimizer,scheduler,trainloader,targetloader,val_ds,test_d
     # labels for adversarial training
     source_label = 0
     target_label = 1
+
+
+
+
+
     for i_iter in range(config.num_steps):
         model.train()
         loss_seg_value1 = 0
@@ -231,7 +254,6 @@ def train_their(model,optimizer,scheduler,trainloader,targetloader,val_ds,test_d
         loss_D_value2 = 0
 
         optimizer.zero_grad()
-        adjust_learning_rate(optimizer, i_iter)
 
         optimizer_D1.zero_grad()
         optimizer_D2.zero_grad()
@@ -258,9 +280,9 @@ def train_their(model,optimizer,scheduler,trainloader,targetloader,val_ds,test_d
 
             images, labels = batch
             images = Variable(images).to(args.gpu)
-
-            pred1, pred2 = model(images)
-
+            _, pred2 = model(images)
+            # pred1 = interp(pred1)
+            # pred2 = interp(pred2)
 
             # loss_seg1 = loss_calc(pred1, labels, args.gpu)
             loss_seg2 = loss_calc(pred2, labels, args.gpu)
@@ -282,23 +304,25 @@ def train_their(model,optimizer,scheduler,trainloader,targetloader,val_ds,test_d
             images, _ = batch
             images = Variable(images).to(args.gpu)
 
-            pred_target1, pred_target2 = model(images)
+            _, pred_target2 = model(images)
+            # pred_target1 = interp_target(pred_target1)
+            # pred_target2 = interp_target(pred_target2)
 
-            D_out1 = model_D1(F.softmax(pred_target1))
+            # D_out1 = model_D1(F.softmax(pred_target1))
             D_out2 = model_D2(F.softmax(pred_target2))
 
-            loss_adv_target1 = bce_loss(D_out1,
-                                        Variable(torch.FloatTensor(D_out1.data.size()).fill_(source_label)).to(
-                                            args.gpu))
+            # loss_adv_target1 = bce_loss(D_out1,
+            #                             Variable(torch.FloatTensor(D_out1.data.size()).fill_(source_label)).to(
+            #                                 args.gpu))
 
             loss_adv_target2 = bce_loss(D_out2,
                                         Variable(torch.FloatTensor(D_out2.data.size()).fill_(source_label)).to(
                                             args.gpu))
 
-            loss = args.lambda_adv_target1 * loss_adv_target1 + args.lambda_adv_target2 * loss_adv_target2
+            loss =  args.lambda_adv_target2 * loss_adv_target2
             loss = loss / args.iter_size
             loss.backward()
-            loss_adv_target_value1 += loss_adv_target1.data.cpu().numpy() / args.iter_size
+            # loss_adv_target_value1 += loss_adv_target1.data.cpu().numpy() / args.iter_size
             loss_adv_target_value2 += loss_adv_target2.data.cpu().numpy() / args.iter_size
 
             # train D
@@ -311,52 +335,53 @@ def train_their(model,optimizer,scheduler,trainloader,targetloader,val_ds,test_d
                 param.requires_grad = True
 
             # train with source
-            pred1 = pred1.detach()
+            # pred1 = pred1.detach()
             pred2 = pred2.detach()
 
-            D_out1 = model_D1(F.softmax(pred1))
+            # D_out1 = model_D1(F.softmax(pred1))
             D_out2 = model_D2(F.softmax(pred2))
 
-            loss_D1 = bce_loss(D_out1,
-                               Variable(torch.FloatTensor(D_out1.data.size()).fill_(source_label)).to(args.gpu))
+            # loss_D1 = bce_loss(D_out1,
+            #                    Variable(torch.FloatTensor(D_out1.data.size()).fill_(source_label)).to(args.gpu))
 
             loss_D2 = bce_loss(D_out2,
                                Variable(torch.FloatTensor(D_out2.data.size()).fill_(source_label)).to(args.gpu))
 
-            loss_D1 = loss_D1 / args.iter_size / 2
+            # loss_D1 = loss_D1 / args.iter_size / 2
             loss_D2 = loss_D2 / args.iter_size / 2
 
-            loss_D1.backward()
+            # loss_D1.backward()
             loss_D2.backward()
 
-            loss_D_value1 += loss_D1.data.cpu().numpy()
+            # loss_D_value1 += loss_D1.data.cpu().numpy()
             loss_D_value2 += loss_D2.data.cpu().numpy()
 
             # train with target
-            pred_target1 = pred_target1.detach()
+            # pred_target1 = pred_target1.detach()
             pred_target2 = pred_target2.detach()
 
-            D_out1 = model_D1(F.softmax(pred_target1))
+            # D_out1 = model_D1(F.softmax(pred_target1))
             D_out2 = model_D2(F.softmax(pred_target2))
 
-            loss_D1 = bce_loss(D_out1,
-                               Variable(torch.FloatTensor(D_out1.data.size()).fill_(target_label)).to(args.gpu))
+            # loss_D1 = bce_loss(D_out1,
+            #                    Variable(torch.FloatTensor(D_out1.data.size()).fill_(target_label)).to(args.gpu))
 
             loss_D2 = bce_loss(D_out2,
                                Variable(torch.FloatTensor(D_out2.data.size()).fill_(target_label)).to(args.gpu))
 
-            loss_D1 = loss_D1 / args.iter_size / 2
+            # loss_D1 = loss_D1 / args.iter_size / 2
             loss_D2 = loss_D2 / args.iter_size / 2
 
-            loss_D1.backward()
+            # loss_D1.backward()
             loss_D2.backward()
 
-            loss_D_value1 += loss_D1.data.cpu().numpy()
+            # loss_D_value1 += loss_D1.data.cpu().numpy()
             loss_D_value2 += loss_D2.data.cpu().numpy()
 
         optimizer.step()
         optimizer_D1.step()
         optimizer_D2.step()
+        scheduler.step()
 
         print(
             'iter = {0:8d}/{1:8d}, loss_seg1 = {2:.3f} loss_seg2 = {3:.3f} loss_adv1 = {4:.3f}, loss_adv2 = {5:.3f} loss_D1 = {6:.3f} loss_D2 = {7:.3f}'.format(

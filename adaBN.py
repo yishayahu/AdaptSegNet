@@ -101,6 +101,6 @@ def main():
 
 
 if __name__ == '__main__':
-    config = AdabnMsmConfig()
+    config = AdabnCC359Config()
     main()
 
