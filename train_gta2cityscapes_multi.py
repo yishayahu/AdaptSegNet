@@ -1,6 +1,8 @@
 import argparse
 import dataclasses
 import json
+import os
+import shutil
 from pathlib import Path
 import PIL
 import matplotlib.cm as mplcm
@@ -29,13 +31,30 @@ from model.deeplab_multi import DeeplabMulti
 from model.discriminator import FCDiscriminator
 from model.unet import UNet2D
 from utils.loss import CrossEntropy2d, freeze_model
-
+import fnmatch
 from configs import *
 
 
 
 
+def include_patterns(*patterns):
+    """Factory function that can be used with copytree() ignore parameter.
 
+    Arguments define a sequence of glob-style patterns
+    that are used to specify what files to NOT ignore.
+    Creates and returns a function that determines this for each directory
+    in the file hierarchy rooted at the source directory when used with
+    shutil.copytree().
+    """
+
+    def _ignore_patterns(path, names):
+        keep = set(name for pattern in patterns
+                   for name in fnmatch.filter(names, pattern))
+        ignore = set(name for name in names
+                     if name not in keep and not os.path.isdir(os.path.join(path, name)))
+        return ignore
+
+    return _ignore_patterns
 
 
 def tensor_to_image(tensor):
@@ -145,6 +164,8 @@ else:
     else:
         assert args.mode == 'their'
         config = CC359ConfigTheir()
+if args.exp_name == '':
+    args.exp_name  = args.mode
 best_sdice = -1
 
 def loss_calc(pred, label, gpu):
@@ -473,6 +494,8 @@ def train_clustering(model,optimizer,scheduler,trainloader,targetloader,val_ds,t
     epoch_dist_loss = []
     optimizer.zero_grad()
     for i_iter in tqdm(range(config.num_steps)):
+        if config.use_adjust_lr:
+            adjust_learning_rate(optimizer, i_iter)
         if i_iter == 0:
             if config.parallel_model:
                 model.module.get_bottleneck = False
@@ -760,8 +783,10 @@ def main():
         scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=config.milestones, gamma=config.sched_gamma)
     else:
         scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[], gamma=1)
+
     config.exp_dir.mkdir(parents=True,exist_ok=True)
     json.dump(dataclasses.asdict(config),open(config.exp_dir/'config.json','w'))
+    shutil.copytree('.',config.exp_dir / 'code',ignore=include_patterns('*.py'))
 
     model.train()
     if not torch.cuda.is_available():
@@ -796,12 +821,14 @@ def main():
             project='spot3',
             id=wandb.util.generate_id(),
             name=args.exp_name,
+            dir='..'
         )
     else:
         wandb.init(
             project=project,
             id=wandb.util.generate_id(),
             name=args.exp_name,
+            dir='..'
         )
     trainloader = data.DataLoader(source_ds,batch_size=config.source_batch_size, shuffle=True, num_workers=args.num_workers,pin_memory=True)
     targetloader = data.DataLoader(target_ds, batch_size=config.target_batch_size, shuffle=True, num_workers=args.num_workers,pin_memory=True)

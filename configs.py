@@ -48,14 +48,15 @@ class CC359ConfigFinetuneClustering(CC359BaseConfig):
     target_batch_size = 12
     n_clusters = 12
     num_steps = 7500
-    lr = 1e-4
+    lr = 1e-5
     use_slice_num = True
     id_to_num_slices = '/home/dsi/shaya/id_to_num_slices.json'
     dist_loss_lambda = 0.1
-    sched = True
+    sched = False
     sched_gamma = 0.1
     acc_amount = 40
     milestones = [3500,5000,6500]
+    use_adjust_lr = True
 
 @dataclass
 class DebugConfigCC359(CC359BaseConfig):
@@ -94,7 +95,7 @@ class MsmPretrainConfig(MsmBaseConfig):
     lr = 1e-3
     source_batch_size = 16
     target_batch_size = 1
-    parallel_model = True
+    parallel_model = False
 
 @dataclass
 class MsmConfigFinetuneClustering(MsmBaseConfig):
