@@ -34,10 +34,8 @@ from configs import *
 
 
 
-if True:
+if 'config' not in globals():
     config = MsmConfigFinetuneClustering()
-else:
-    config = DebugConfigCC359()
 
 
 
@@ -55,7 +53,7 @@ def tensor_to_image(tensor):
     return PIL.Image.fromarray(tensor)
 
 ITER_SIZE = 1
-NUM_WORKERS = 4
+NUM_WORKERS = 1
 MOMENTUM = 0.9
 NUM_CLASSES = 2
 NUM_STEPS_STOP = 150000  # early stopping
@@ -479,12 +477,18 @@ def train_clustering(model,optimizer,scheduler,trainloader,targetloader,val_ds,t
             for id_slc,feat in slice_to_feature_source.items():
                 points.append(feat)
                 id1, slc_num = id_slc.split('_')
-                slc_num = int(slc_num) / id_to_num_slices[id1]
+                if config.msm:
+                    slc_num = int(slc_num) / id_to_num_slices[id1]
+                else:
+                    slc_num = int(slc_num)/ id_to_num_slices[id1]
                 slices.append(slc_num)
             for id_slc,feat in slice_to_feature_target.items():
                 points.append(feat)
                 id1, slc_num = id_slc.split('_')
-                slc_num = int(slc_num)/ id_to_num_slices[id1]
+                if config.msm:
+                    slc_num = int(slc_num) / id_to_num_slices[id1]
+                else:
+                    slc_num = int(slc_num) / id_to_num_slices[id1]
                 slices.append(slc_num)
             points = np.array(points)
             points = points.reshape(points.shape[0],-1)
@@ -539,7 +543,9 @@ def train_clustering(model,optimizer,scheduler,trainloader,targetloader,val_ds,t
             plt.savefig(im_path_source)
             plt.cla()
             plt.clf()
+            plt.close()
             im_path_target = str(config.exp_dir /  f'{i_iter}_target.png')
+
             fig = plt.figure()
             ax = fig.add_subplot()
             curr_colors = []
@@ -553,6 +559,7 @@ def train_clustering(model,optimizer,scheduler,trainloader,targetloader,val_ds,t
             plt.savefig(im_path_target)
             plt.cla()
             plt.clf()
+            plt.close()
             im_path_clusters = str(config.exp_dir /  f'{i_iter}_clusters.png')
             fig = plt.figure()
             ax = fig.add_subplot()
@@ -564,13 +571,13 @@ def train_clustering(model,optimizer,scheduler,trainloader,targetloader,val_ds,t
             plt.savefig(im_path_clusters)
             plt.cla()
             plt.clf()
+            plt.close()
             slice_to_feature_source = {}
             slice_to_feature_target = {}
             vizviz = {}
             log_log = {f'figs/source': wandb.Image(im_path_source),f'figs/target': wandb.Image(im_path_target),f'figs/cluster': wandb.Image(im_path_clusters)}
             wandb.log(log_log,step=i_iter)
         log_log = {}
-        adjust_learning_rate(optimizer, i_iter)
         for sub_i in range(args.iter_size):
             try:
                 batch = trainloader_iter.next()
@@ -636,7 +643,7 @@ def train_clustering(model,optimizer,scheduler,trainloader,targetloader,val_ds,t
             if accumulate_for_loss is not None:
                 use_dist_loss = False
                 lens1 = [len(x) for x in accumulate_for_loss]
-                if np.sum(lens1) > 40:
+                if np.sum(lens1) > config.acc_amount:
                     use_dist_loss = True
                 if use_dist_loss:
                     for i,features in enumerate(accumulate_for_loss):
@@ -667,9 +674,11 @@ def train_clustering(model,optimizer,scheduler,trainloader,targetloader,val_ds,t
                     optimizer.zero_grad()
                 else:
                     losses_dict['seg_loss'].backward(retain_graph=True)
+                    scheduler.step()
             log_log['seg_loss'] = float(np.mean(epoch_seg_loss))
             if epoch_dist_loss:
                 log_log['dist_loss'] = float(np.mean(epoch_dist_loss))
+            log_log['lr'] = float(scheduler.get_last_lr()[0])
             wandb.log(log_log,step=i_iter)
 
         if config.parallel_model:
@@ -738,7 +747,7 @@ def main():
 
     model.to(args.gpu)
     if config.parallel_model:
-        model = torch.nn.DataParallel(model, device_ids=[1, 2, 5])
+        model = torch.nn.DataParallel(model, device_ids=[1, 5])
     random.seed(RANDOM_SEED)
     np.random.seed(RANDOM_SEED)
     torch.manual_seed(RANDOM_SEED)

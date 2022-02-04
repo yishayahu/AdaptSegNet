@@ -14,7 +14,7 @@ class CC359BaseConfig:
     n_channels = 1
     save_pred_every =  500
     epoch_every = 1000
-    num_steps = 10000
+
     parallel_model = False
 
 @dataclass
@@ -23,9 +23,20 @@ class AdabnCC359Config(CC359BaseConfig):
 
 
 @dataclass
+class CC359ConfigTheir(CC359BaseConfig):
+    source_batch_size = 8
+    target_batch_size = 8
+    num_steps = 5000
+    lr = 1e-4
+    sched = True
+    sched_gamma = 0.1
+    milestones = [3500]
+
+@dataclass
 class CC359ConfigPretrain(CC359BaseConfig):
     source_batch_size = 16
     target_batch_size = 1
+    num_steps = 10000
     lr = 1e-3
     sched = True
     sched_gamma = 0.1
@@ -36,11 +47,15 @@ class CC359ConfigFinetuneClustering(CC359BaseConfig):
     source_batch_size = 4
     target_batch_size = 12
     n_clusters = 12
+    num_steps = 5000
     lr = 1e-5
     use_slice_num = True
     id_to_num_slices = '/home/dsi/shaya/id_to_num_slices.json'
     dist_loss_lambda = 0.1
-    sched = False
+    sched = True
+    sched_gamma = 0.1
+    acc_amount = 40
+    milestones = [3500]
 
 @dataclass
 class DebugConfigCC359(CC359BaseConfig):
@@ -83,15 +98,19 @@ class MsmPretrainConfig(MsmBaseConfig):
 
 @dataclass
 class MsmConfigFinetuneClustering(MsmBaseConfig):
-    n_clusters = 12
-    lr = 1e-5
+    n_clusters = 8
+    lr = 5e-6
     use_slice_num = True
     id_to_num_slices = '/home/dsi/shaya/id_to_num_slices_msm.json'
-    source_batch_size = 4
-    target_batch_size = 12
-    dist_loss_lambda = 0.1
+    source_batch_size = 8
+    target_batch_size = 8
+    dist_loss_lambda = 0.7
     parallel_model = True
-    sched = False
+    sched = True
+    acc_amount = 30
+    sched_gamma = 0.1
+    milestones = [1500,2500]
+
 
 
 @dataclass
