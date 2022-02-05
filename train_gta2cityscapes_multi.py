@@ -167,6 +167,7 @@ else:
 if args.exp_name == '':
     args.exp_name  = args.mode
 best_sdice = -1
+best_source_sdice = -1
 
 def loss_calc(pred, label, gpu):
     """
@@ -198,24 +199,34 @@ def adjust_learning_rate_D(optimizer, i_iter):
         optimizer.param_groups[1]['lr'] = lr * 10
 
 
-def after_step(num_step,val_ds,test_ds,model):
+def after_step(num_step,val_ds,test_ds,model,val_ds_source):
 
 
     metric = 'dice' if config.msm else 'sdice'
     global best_sdice
+    global best_source_sdice
     if num_step % config.save_pred_every == 0 and num_step!= 0:
         if config.msm:
             sdice1 = get_dice(model,val_ds,args.gpu,config)
         else:
             sdice1 = get_sdice(model,val_ds,args.gpu,config)
+        if val_ds_source is not None:
+            if config.msm:
+                sdice_source = get_dice(model,val_ds_source,args.gpu,config)
+            else:
+                sdice_source = get_sdice(model,val_ds_source,args.gpu,config)
+            if sdice_source > best_source_sdice:
+                best_source_sdice = sdice_source
+            torch.save(model.state_dict(), config.exp_dir / f'best_source_model.pth')
+            wandb.log({f'{metric}/val_source':sdice_source},step=num_step)
         wandb.log({f'{metric}/val':sdice1},step=num_step)
         print(f'{metric} is ',sdice1)
         print ('taking snapshot ...')
 
         if sdice1 > best_sdice:
             best_sdice = sdice1
-
             torch.save(model.state_dict(), config.exp_dir / f'best_model.pth')
+
         torch.save(model.state_dict(), config.exp_dir / f'model.pth')
     if num_step  == config.num_steps - 1 or num_step == 0:
         title = 'end' if num_step != 0 else 'start'
@@ -232,11 +243,18 @@ def after_step(num_step,val_ds,test_ds,model):
             else:
                 sdice_test_best =get_sdice(model,test_ds,args.gpu,config)
             scores[f'{metric}_{title}/test_best'] = sdice_test_best
+            if val_ds_source is not None:
+                model.load_state_dict(torch.load(config.exp_dir / f'best_source_model.pth',map_location='cpu'))
+                if config.msm:
+                    sdice_test_best_source = get_dice(model,test_ds,args.gpu,config)
+                else:
+                    sdice_test_best_source =get_sdice(model,test_ds,args.gpu,config)
+                scores[f'{metric}_{title}/test_best_source_on_target'] = sdice_test_best_source
 
         wandb.log(scores,step=num_step)
         json.dump(scores,open(config.exp_dir/f'scores_{title}.json','w'))
 
-def train_their(model,optimizer,scheduler,trainloader,targetloader,val_ds,test_ds):
+def train_their(model,optimizer,scheduler,trainloader,targetloader,val_ds,test_ds,val_ds_source):
     trainloader_iter = iter(trainloader)
     targetloader_iter = iter(targetloader)
     bce_loss = torch.nn.BCEWithLogitsLoss()
@@ -407,7 +425,7 @@ def train_their(model,optimizer,scheduler,trainloader,targetloader,val_ds,test_d
         print(
             'iter = {0:8d}/{1:8d}, loss_seg1 = {2:.3f} loss_seg2 = {3:.3f} loss_adv1 = {4:.3f}, loss_adv2 = {5:.3f} loss_D1 = {6:.3f} loss_D2 = {7:.3f}'.format(
                 i_iter, config.num_steps, loss_seg_value1, loss_seg_value2, loss_adv_target_value1, loss_adv_target_value2, loss_D_value1, loss_D_value2))
-        after_step(i_iter,model =model,val_ds=val_ds,test_ds=test_ds)
+        after_step(i_iter,model =model,val_ds=val_ds,test_ds=test_ds,val_ds_source=val_ds_source)
 def train_pretrain(model,optimizer,scheduler,trainloader):
     if config.msm:
         val_ds = MultiSiteMri(load(f'{config.base_splits_path}/site_{args.source}t/val_ids.json'),yield_id=True,test=True)
@@ -448,7 +466,7 @@ def train_pretrain(model,optimizer,scheduler,trainloader):
         print(
             'iter = {0:8d}/{1:8d}, loss_seg1 = {2:.3f}'.format(
                 i_iter, config.num_steps, loss_seg_value))
-        after_step(i_iter,model =model,val_ds=val_ds,test_ds=test_ds)
+        after_step(i_iter,model =model,val_ds=val_ds,test_ds=test_ds,val_ds_source=None)
 
 def get_best_match_aux(distss):
     n_clusters = len(distss)
@@ -469,7 +487,7 @@ def get_best_match(sc, tc):
 
     return best_match
 
-def train_clustering(model,optimizer,scheduler,trainloader,targetloader,val_ds,test_ds):
+def train_clustering(model,optimizer,scheduler,trainloader,targetloader,val_ds,test_ds,val_ds_source):
     freeze_model(model,exclude_layers = [ 'init_path', 'down','bottleneck' ])
     trainloader.dataset.yield_id = True
     targetloader.dataset.yield_id = True
@@ -501,7 +519,7 @@ def train_clustering(model,optimizer,scheduler,trainloader,targetloader,val_ds,t
                 model.module.get_bottleneck = False
             else:
                 model.get_bottleneck = False
-            after_step(i_iter,val_ds,test_ds,model)
+            after_step(i_iter,val_ds,test_ds,model,val_ds_source)
             continue
         if config.parallel_model:
             model.module.get_bottleneck = True
@@ -733,7 +751,7 @@ def train_clustering(model,optimizer,scheduler,trainloader,targetloader,val_ds,t
             model.module.get_bottleneck = False
         else:
             model.get_bottleneck = False
-        after_step(i_iter,val_ds,test_ds,model)
+        after_step(i_iter,val_ds,test_ds,model,val_ds_source)
 def main():
     """Create the model and start the training."""
 
@@ -809,12 +827,14 @@ def main():
         source_ds = MultiSiteMri(load(f'{config.base_splits_path}/site_{args.source}t/train_ids.json'))
         target_ds = MultiSiteMri(load(f'{config.base_splits_path}/site_{args.target}/train_ids.json'))
         val_ds = MultiSiteMri(load(f'{config.base_splits_path}/site_{args.target}/val_ids.json'),yield_id=True,test=True)
+        val_ds_source = MultiSiteMri(load(f'{config.base_splits_path}/site_{args.source}t/val_ids.json'),yield_id=True,test=True)
         test_ds = MultiSiteMri(load(f'{config.base_splits_path}/site_{args.target}/test_ids.json'),yield_id=True,test=True)
         project = 'adaptSegUNetMsm'
     else:
         source_ds = CC359Ds(load(f'{config.base_splits_path}/site_{args.source}/train_ids.json')[:config.data_len])
         target_ds = CC359Ds(load(f'{config.base_splits_path}/site_{args.target}/train_ids.json')[:config.data_len])
         val_ds = CC359Ds(load(f'{config.base_splits_path}/site_{args.target}/val_ids.json'),yield_id=True,slicing_interval=1)
+        val_ds_source = CC359Ds(load(f'{config.base_splits_path}/site_{args.source}/val_ids.json'),yield_id=True,slicing_interval=1)
         test_ds = CC359Ds(load(f'{config.base_splits_path}/site_{args.target}/test_ids.json'),yield_id=True,slicing_interval=1)
         project = 'adaptSegUNet'
     if config.debug:
@@ -840,10 +860,10 @@ def main():
     if args.mode == 'pretrain':
         train_pretrain(model,optimizer,scheduler,trainloader)
     elif args.mode == 'clustering_finetune':
-        train_clustering(model,optimizer,scheduler,trainloader,targetloader,val_ds,test_ds)
+        train_clustering(model,optimizer,scheduler,trainloader,targetloader,val_ds,test_ds,val_ds_source)
     else:
         assert args.mode == 'their'
-        train_their(model,optimizer,scheduler,trainloader,targetloader,val_ds,test_ds)
+        train_their(model,optimizer,scheduler,trainloader,targetloader,val_ds,test_ds,val_ds_source)
 
 
 
