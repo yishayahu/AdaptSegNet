@@ -217,7 +217,7 @@ def after_step(num_step,val_ds,test_ds,model,val_ds_source):
                 sdice_source = get_sdice(model,val_ds_source,args.gpu,config)
             if sdice_source > best_source_sdice:
                 best_source_sdice = sdice_source
-            torch.save(model.state_dict(), config.exp_dir / f'best_source_model.pth')
+                torch.save(model.state_dict(), config.exp_dir / f'best_source_model.pth')
             wandb.log({f'{metric}/val_source':sdice_source},step=num_step)
         wandb.log({f'{metric}/val':sdice1},step=num_step)
         print(f'{metric} is ',sdice1)
@@ -802,7 +802,7 @@ def main():
     else:
         scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[], gamma=1)
     if config.exp_dir.exists():
-        config.exp_dir.rmdir()
+        shutil.rmtree(config.exp_dir)
     config.exp_dir.mkdir(parents=True,exist_ok=True)
     json.dump(dataclasses.asdict(config),open(config.exp_dir/'config.json','w'))
     shutil.copytree('.',config.exp_dir / 'code',ignore=include_patterns('*.py'))
@@ -816,7 +816,7 @@ def main():
 
     model.to(args.gpu)
     if config.parallel_model:
-        model = torch.nn.DataParallel(model, device_ids=[1, 5])
+        model = torch.nn.DataParallel(model, device_ids=[0,1,2, 5])
     random.seed(RANDOM_SEED)
     np.random.seed(RANDOM_SEED)
     torch.manual_seed(RANDOM_SEED)

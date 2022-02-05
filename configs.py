@@ -112,6 +112,7 @@ class MsmConfigFinetuneClustering(MsmBaseConfig):
     acc_amount = 30
     sched_gamma = 0.1
     milestones = [1500,2500]
+    use_adjust_lr = False
 
 
 
