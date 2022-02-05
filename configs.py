@@ -46,7 +46,7 @@ class CC359ConfigPretrain(CC359BaseConfig):
 class CC359ConfigFinetuneClustering(CC359BaseConfig):
     source_batch_size = 4
     target_batch_size = 12
-    n_clusters = 12
+    n_clusters = 14
     num_steps = 7500
     lr = 1e-5
     use_slice_num = True
@@ -54,7 +54,7 @@ class CC359ConfigFinetuneClustering(CC359BaseConfig):
     dist_loss_lambda = 0.1
     sched = False
     sched_gamma = 0.1
-    acc_amount = 40
+    acc_amount = 50
     milestones = [3500,5000,6500]
     use_adjust_lr = True
 
@@ -96,6 +96,7 @@ class MsmPretrainConfig(MsmBaseConfig):
     source_batch_size = 16
     target_batch_size = 1
     parallel_model = False
+    sched =False
 
 @dataclass
 class MsmConfigFinetuneClustering(MsmBaseConfig):

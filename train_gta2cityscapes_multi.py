@@ -783,7 +783,8 @@ def main():
         scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=config.milestones, gamma=config.sched_gamma)
     else:
         scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[], gamma=1)
-
+    if config.exp_dir.exists():
+        config.exp_dir.rmdir()
     config.exp_dir.mkdir(parents=True,exist_ok=True)
     json.dump(dataclasses.asdict(config),open(config.exp_dir/'config.json','w'))
     shutil.copytree('.',config.exp_dir / 'code',ignore=include_patterns('*.py'))
