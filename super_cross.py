@@ -97,7 +97,7 @@ def run_cross_validation(experiments, combs, only_stats=False):
                     cmd,
                     shell=True, check=True)
                 my_devices.remove(curr_device)
-            scores_path = f'{base_res_dir}/source_{source}_target_{target}/{exp}/scores.json'
+            scores_path = f'{base_res_dir}/source_{source}_target_{target}/{exp}/scores_end.json'
             if not os.path.exists(scores_path):
                 if only_stats:
                     continue

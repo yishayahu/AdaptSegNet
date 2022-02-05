@@ -78,7 +78,7 @@ def run_adaBN(source, target, device):
     p1.mkdir(parents=True, exist_ok=True)
     torch.save(model.state_dict(),f'{config.base_res_path}/source_{source}_target_{target}/adaBN/model.pth')
     print(sdice_test)
-    json.dump({f"{metric}/test": sdice_test, f"{metric}/test_best":sdice_test},open(p1 / 'scores.json','w'))
+    json.dump({f"{metric}/test": sdice_test, f"{metric}/test_best":sdice_test},open(p1 / 'scores_end.json','w'))
 
 
 def main():
