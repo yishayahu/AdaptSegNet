@@ -49,6 +49,9 @@ def get_sdice(model,ds,device,config):
             if id1 != prev_id:
                 assert id1 not in done_ids
                 done_ids.add(id1)
+                id1_str = str(id1)
+                while len(id1_str) < 3:
+                    id1_str = '0' + id1_str
                 all_sdices.append(sdice(np.stack(all_segs),np.stack(all_preds),ds.spacing_loader('CC0'+str(id1))))
                 all_preds = []
                 all_segs = []

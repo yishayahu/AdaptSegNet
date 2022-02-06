@@ -115,8 +115,8 @@ def run_cross_validation(experiments, combs, only_stats=False):
             else:
                 print(f'loading exists on source {source} target {target} exp {exp}')
                 scores =json.load(open(scores_path))
-                sdice = scores['sdice/test']
-                best_sdice = scores['sdice/test_best']
+                sdice = 0#scores['sdice/test']
+                best_sdice = 0#scores['sdice/test_best']
                 sdice = max(sdice,best_sdice)
                 stats[exp][f's_{source} t_{target}'] = sdice
     still_running = running_now
