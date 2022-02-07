@@ -126,7 +126,7 @@ class Rescale3D(Change):
 
 
 class CC359Ds(torch.utils.data.Dataset):
-    def __init__(self,ids,yield_id=False,slicing_interval=10,exp_dir=''):
+    def __init__(self,ids,yield_id=False,slicing_interval=1,exp_dir=''):
         self.slicing_interval = slicing_interval
         voxel_spacing = (1, 0.95, 0.95)
         preprocessed_dataset = apply(Rescale3D(CC359(ccc359_data_path), voxel_spacing), load_image=scale_mri)
