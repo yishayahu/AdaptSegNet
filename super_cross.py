@@ -58,10 +58,10 @@ def run_single_exp(exp, device, source, target, scores_path, my_devices, ret_val
             print(cmd)
             subprocess.run(cmd, shell=True, check=True)
             scores =json.load(open(scores_path))
-            sdice = scores['sdice/test']
-            best_sdice = scores['sdice/test_best']
-            sdice = max(sdice,best_sdice)
-            ret_value.value = sdice
+            # sdice = scores['sdice/test']
+            # best_sdice = scores['sdice/test_best']
+            # sdice = max(sdice,best_sdice)
+            ret_value.value = 0
         except subprocess.CalledProcessError:
             print(f'error in exp {exp}_{source}_{target}')
             shutil.copy(err_file.name, f'errs_and_outs/{exp}_{source}_{target}_logs_err.txt')
