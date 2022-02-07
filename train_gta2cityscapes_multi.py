@@ -525,7 +525,10 @@ def train_clustering(model,optimizer,scheduler,trainloader,targetloader,val_ds,t
             model.module.get_bottleneck = True
         else:
             model.get_bottleneck = True
-        model.train()
+        if best_matchs is None:
+            model.eval()
+        else:
+            model.train()
         if i_iter % config.epoch_every == 0 and i_iter != 0:
             source_clusters = []
             target_clusters = []
@@ -734,10 +737,11 @@ def train_clustering(model,optimizer,scheduler,trainloader,targetloader,val_ds,t
                     scheduler.step()
                     optimizer.zero_grad()
                 elif best_matchs is None:
-                    losses_dict['seg_loss'].backward()
-                    optimizer.step()
-                    scheduler.step()
-                    optimizer.zero_grad()
+                    pass
+                    # losses_dict['seg_loss'].backward()
+                    # optimizer.step()
+                    # scheduler.step()
+                    # optimizer.zero_grad()
                 else:
                     losses_dict['seg_loss'].backward(retain_graph=True)
                     scheduler.step()
