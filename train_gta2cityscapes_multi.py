@@ -491,7 +491,7 @@ def get_best_match(sc, tc):
     return best_match
 
 def train_clustering(model,optimizer,scheduler,trainloader,targetloader,val_ds,test_ds,val_ds_source):
-    freeze_model(model,exclude_layers = [ 'init_path', 'down','bottleneck' ])
+    # freeze_model(model,exclude_layers = [ 'init_path', 'down','bottleneck' ])
     trainloader.dataset.yield_id = True
     targetloader.dataset.yield_id = True
     trainloader_iter = iter(trainloader)
