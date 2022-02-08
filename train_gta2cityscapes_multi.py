@@ -506,6 +506,7 @@ def train_clustering(model,optimizer,scheduler,trainloader,targetloader,val_ds,t
         for _ in range(n_clusters):
             accumulate_for_loss.append([])
     slice_to_feature_source = {}
+    slice_to_label_source = {}
     slice_to_feature_target = {}
     id_to_num_slices = load(config.id_to_num_slices)
     epoch_seg_loss = []
@@ -575,8 +576,8 @@ def train_clustering(model,optimizer,scheduler,trainloader,targetloader,val_ds,t
             print('getting best match')
             best_matchs_indexes=get_best_match(k1.cluster_centers_,k2.cluster_centers_)
             slice_to_cluster = {}
-            items = list(slice_to_feature_source.items())
-            for i in range(len(slice_to_feature_source)):
+            items = list(slice_to_label_source.items())
+            for i in range(len(slice_to_label_source)):
                 source_clusters[sc[i]].append(items[i][1])
                 slice_to_cluster[items[i][0]] = sc[i]
             items = list(slice_to_feature_target.items())
@@ -639,6 +640,7 @@ def train_clustering(model,optimizer,scheduler,trainloader,targetloader,val_ds,t
             plt.clf()
             plt.close()
             slice_to_feature_source = {}
+            slice_to_label_source = {}
             slice_to_feature_target = {}
             vizviz = {}
             log_log = {f'figs/source': wandb.Image(im_path_source),f'figs/target': wandb.Image(im_path_target),f'figs/cluster': wandb.Image(im_path_clusters)}
@@ -656,8 +658,9 @@ def train_clustering(model,optimizer,scheduler,trainloader,targetloader,val_ds,t
 
             _, pred,features = model(images)
             features = features.mean(1).detach().cpu().numpy()
-            for id1,slc_num,feature,img in zip(ids,slice_nums,features,images):
+            for id1,slc_num,feature,img,lbl in zip(ids,slice_nums,features,images,labels):
                 slice_to_feature_source[f'{id1}_{slc_num}'] = feature
+                slice_to_label_source[f'{id1}_{slc_num}'] = lbl
                 if best_matchs is not None and f'{id1}_{slc_num}' in slice_to_cluster:
                     src_cluster = slice_to_cluster[f'{id1}_{slc_num}']
                     if f'source_{src_cluster}' not in vizviz or len(vizviz[f'source_{src_cluster}']) < 4:
@@ -715,7 +718,7 @@ def train_clustering(model,optimizer,scheduler,trainloader,targetloader,val_ds,t
                     for i,features in enumerate(accumulate_for_loss):
                         if len(features) > 0:
                             features = torch.mean(torch.stack(features),dim=0)
-                            dist_loss+= torch.mean((features - best_matchs[i].to(args.gpu))**2)
+                            dist_loss+= loss_calc(features, best_matchs[i], args.gpu)
                             accumulate_for_loss[i] = []
             dist_loss*= dist_loss_lambda
             if float(dist_loss) > 0:
