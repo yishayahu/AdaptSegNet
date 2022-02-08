@@ -13,7 +13,7 @@ class CC359BaseConfig:
     msm = False
     n_channels = 1
     save_pred_every =  500
-    epoch_every = 500
+    epoch_every = 1000
 
     parallel_model = False
 
@@ -72,6 +72,8 @@ class DebugConfigCC359(CC359BaseConfig):
     dist_loss_lambda = 0.1
     use_slice_num = True
     id_to_num_slices = '/home/dsi/shaya/id_to_num_slices.json'
+    sched = False
+    use_adjust_lr = False
 
 
 
