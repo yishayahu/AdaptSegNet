@@ -13,7 +13,7 @@ class CC359BaseConfig:
     msm = False
     n_channels = 1
     save_pred_every =  500
-    epoch_every = 1000
+    epoch_every = 500
 
     parallel_model = False
 
@@ -44,19 +44,19 @@ class CC359ConfigPretrain(CC359BaseConfig):
 
 @dataclass
 class CC359ConfigFinetuneClustering(CC359BaseConfig):
-    source_batch_size = 4
-    target_batch_size = 12
-    n_clusters = 9
+    source_batch_size = 8
+    target_batch_size = 8
+    n_clusters = 8
     num_steps = 5000
-    lr = 5e-6
+    lr = 1e-6
     use_slice_num = True
     id_to_num_slices = '/home/dsi/shaya/id_to_num_slices.json'
-    dist_loss_lambda = 0.1
-    sched = False
+    dist_loss_lambda = 2
+    sched = True
     sched_gamma = 0.1
-    acc_amount = 50
-    milestones = [3500,5000,6500]
-    use_adjust_lr = True
+    acc_amount = 25
+    milestones = [2500,4000]
+    use_adjust_lr = False
 
 @dataclass
 class DebugConfigCC359(CC359BaseConfig):

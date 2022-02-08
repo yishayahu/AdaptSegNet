@@ -167,7 +167,7 @@ else:
 if args.exp_name == '':
     args.exp_name  = args.mode
 best_sdice = -1
-best_source_sdice = -1
+low_source_sdice = 1.1
 
 def loss_calc(pred, label, gpu):
     """
@@ -204,7 +204,7 @@ def after_step(num_step,val_ds,test_ds,model,val_ds_source):
 
     metric = 'dice' if config.msm else 'sdice'
     global best_sdice
-    global best_source_sdice
+    global low_source_sdice
     if num_step % config.save_pred_every == 0 and num_step!= 0:
         if config.msm:
             sdice1 = get_dice(model,val_ds,args.gpu,config)
@@ -215,9 +215,9 @@ def after_step(num_step,val_ds,test_ds,model,val_ds_source):
                 sdice_source = get_dice(model,val_ds_source,args.gpu,config)
             else:
                 sdice_source = get_sdice(model,val_ds_source,args.gpu,config)
-            if sdice_source > best_source_sdice:
-                best_source_sdice = sdice_source
-                torch.save(model.state_dict(), config.exp_dir / f'best_source_model.pth')
+            if sdice_source < low_source_sdice:
+                low_source_sdice = sdice_source
+                torch.save(model.state_dict(), config.exp_dir / f'low_source_model.pth')
             wandb.log({f'{metric}/val_source':sdice_source},step=num_step)
         wandb.log({f'{metric}/val':sdice1},step=num_step)
         print(f'{metric} is ',sdice1)
@@ -244,12 +244,12 @@ def after_step(num_step,val_ds,test_ds,model,val_ds_source):
                 sdice_test_best =get_sdice(model,test_ds,args.gpu,config)
             scores[f'{metric}_{title}/test_best'] = sdice_test_best
             if val_ds_source is not None:
-                model.load_state_dict(torch.load(config.exp_dir / f'best_source_model.pth',map_location='cpu'))
+                model.load_state_dict(torch.load(config.exp_dir / f'low_source_model.pth',map_location='cpu'))
                 if config.msm:
-                    sdice_test_best_source = get_dice(model,test_ds,args.gpu,config)
+                    sdice_test_low_source = get_dice(model,test_ds,args.gpu,config)
                 else:
-                    sdice_test_best_source =get_sdice(model,test_ds,args.gpu,config)
-                scores[f'{metric}_{title}/test_best_source_on_target'] = sdice_test_best_source
+                    sdice_test_low_source =get_sdice(model,test_ds,args.gpu,config)
+                scores[f'{metric}_{title}/test_low_source_on_target'] = sdice_test_low_source
 
         wandb.log(scores,step=num_step)
         json.dump(scores,open(config.exp_dir/f'scores_{title}.json','w'))
@@ -525,10 +525,7 @@ def train_clustering(model,optimizer,scheduler,trainloader,targetloader,val_ds,t
             model.module.get_bottleneck = True
         else:
             model.get_bottleneck = True
-        if best_matchs is None:
-            model.eval()
-        else:
-            model.train()
+        model.train()
         if i_iter % config.epoch_every == 0 and i_iter != 0:
             source_clusters = []
             target_clusters = []
@@ -572,7 +569,7 @@ def train_clustering(model,optimizer,scheduler,trainloader,targetloader,val_ds,t
             k1 = KMeans(n_clusters=n_clusters,random_state=42)
             print('doing kmean 1')
             sc = k1.fit_predict(source_points)
-            k2 = KMeans(n_clusters=n_clusters,random_state=42,init=k1.cluster_centers_)
+            k2 = KMeans(n_clusters=n_clusters,random_state=42)
             print('doing kmean 2')
             tc = k2.fit_predict(target_points)
             print('getting best match')
@@ -737,11 +734,10 @@ def train_clustering(model,optimizer,scheduler,trainloader,targetloader,val_ds,t
                     scheduler.step()
                     optimizer.zero_grad()
                 elif best_matchs is None:
-                    pass
-                    # losses_dict['seg_loss'].backward()
-                    # optimizer.step()
-                    # scheduler.step()
-                    # optimizer.zero_grad()
+                    losses_dict['seg_loss'].backward()
+                    optimizer.step()
+                    scheduler.step()
+                    optimizer.zero_grad()
                 else:
                     losses_dict['seg_loss'].backward(retain_graph=True)
                     scheduler.step()
