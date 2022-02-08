@@ -531,6 +531,8 @@ def train_clustering(model,optimizer,scheduler,trainloader,targetloader,val_ds,t
             model.get_bottleneck = True
         model.train()
         if i_iter % config.epoch_every == 0 and i_iter != 0:
+            trainloader_iter = iter(trainloader)
+            targetloader_iter = iter(targetloader)
             source_clusters = []
             target_clusters = []
             if config.use_accumulate_for_loss:
