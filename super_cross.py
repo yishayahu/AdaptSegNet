@@ -57,7 +57,7 @@ def run_single_exp(exp, device, source, target, scores_path, my_devices, ret_val
                 cmd = f'python train_gta2cityscapes_multi.py  --gpu {device}  --source {source} --target {target} --mode {exp}>  {out_file.name} 2> {err_file.name}'
             print(cmd)
             subprocess.run(cmd, shell=True, check=True)
-            scores =json.load(open(scores_path))
+            # scores =json.load(open(scores_path))
             # sdice = scores['sdice/test']
             # best_sdice = scores['sdice/test_best']
             # sdice = max(sdice,best_sdice)
@@ -114,7 +114,7 @@ def run_cross_validation(experiments, combs, only_stats=False):
                 time.sleep(5)
             else:
                 print(f'loading exists on source {source} target {target} exp {exp}')
-                scores =json.load(open(scores_path))
+                # scores =json.load(open(scores_path))
                 sdice = 0#scores['sdice/test']
                 best_sdice = 0#scores['sdice/test_best']
                 sdice = max(sdice,best_sdice)
