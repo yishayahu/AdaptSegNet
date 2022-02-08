@@ -660,7 +660,7 @@ def train_clustering(model,optimizer,scheduler,trainloader,targetloader,val_ds,t
             features = features.mean(1).detach().cpu().numpy()
             for id1,slc_num,feature,img,lbl in zip(ids,slice_nums,features,images,labels):
                 slice_to_feature_source[f'{id1}_{slc_num}'] = feature
-                slice_to_label_source[f'{id1}_{slc_num}'] = lbl
+                slice_to_label_source[f'{id1}_{slc_num}'] = lbl.detach().cpu().numpy()
                 if best_matchs is not None and f'{id1}_{slc_num}' in slice_to_cluster:
                     src_cluster = slice_to_cluster[f'{id1}_{slc_num}']
                     if f'source_{src_cluster}' not in vizviz or len(vizviz[f'source_{src_cluster}']) < 4:

@@ -54,7 +54,7 @@ class CC359ConfigFinetuneClustering(CC359BaseConfig):
     dist_loss_lambda = 2
     sched = True
     sched_gamma = 0.1
-    acc_amount = 35
+    acc_amount = 25
     milestones = [2500,4000]
     use_adjust_lr = False
 
