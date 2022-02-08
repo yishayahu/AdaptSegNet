@@ -715,7 +715,7 @@ def train_clustering(model,optimizer,scheduler,trainloader,targetloader,val_ds,t
                     for i,features in enumerate(accumulate_for_loss):
                         if len(features) > 0:
                             features = torch.mean(torch.stack(features),dim=0)
-                            dist_loss+= torch.mean(torch.abs(features - best_matchs[i].to(args.gpu)))
+                            dist_loss+= torch.mean((features - best_matchs[i].to(args.gpu))**2)
                             accumulate_for_loss[i] = []
             dist_loss*= dist_loss_lambda
             if float(dist_loss) > 0:
