@@ -156,8 +156,11 @@ if args.msm:
     else:
         assert args.mode == 'their'
         raise NotImplemented()
+
 else:
-    if args.mode == 'clustering_finetune':
+    if 'debug' in args.exp_name:
+      config = DebugConfigCC359()
+    elif args.mode == 'clustering_finetune':
         config = CC359ConfigFinetuneClustering()
     elif args.mode == 'pretrain':
         config = CC359ConfigPretrain()
@@ -687,14 +690,14 @@ def train_clustering(model,optimizer,scheduler,trainloader,targetloader,val_ds,t
             images, labels,ids,slice_nums = batch
             images = Variable(images).to(args.gpu)
 
-            _, __,features = model(images)
+            _, preds,features = model(images)
             features = features.mean(1)
             dist_loss = torch.tensor(0.0,device=args.gpu)
-            for id1,slc_num,feature,img in zip(ids,slice_nums,features,images):
+            for id1,slc_num,feature,img,pred in zip(ids,slice_nums,features,images,preds):
                 slice_to_feature_target[f'{id1}_{slc_num}'] = feature.detach().cpu().numpy()
                 if best_matchs is not None and  f'{id1}_{slc_num}' in slice_to_cluster:
                     if config.use_accumulate_for_loss:
-                        accumulate_for_loss[slice_to_cluster[f'{id1}_{slc_num}']].append(feature)
+                        accumulate_for_loss[slice_to_cluster[f'{id1}_{slc_num}']].append(pred)
                     else:
                         dist_loss+= torch.mean(torch.abs(feature - best_matchs[slice_to_cluster[f'{id1}_{slc_num}']].to(args.gpu)))
                     src_cluster = best_matchs_indexes[slice_to_cluster[f'{id1}_{slc_num}']]
