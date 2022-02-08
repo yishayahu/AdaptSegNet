@@ -44,9 +44,9 @@ class CC359ConfigPretrain(CC359BaseConfig):
 
 @dataclass
 class CC359ConfigFinetuneClustering(CC359BaseConfig):
-    source_batch_size = 8
-    target_batch_size = 8
-    n_clusters = 8
+    source_batch_size = 4
+    target_batch_size = 12
+    n_clusters = 12
     num_steps = 5000
     lr = 1e-6
     use_slice_num = True
@@ -54,7 +54,7 @@ class CC359ConfigFinetuneClustering(CC359BaseConfig):
     dist_loss_lambda = 2
     sched = True
     sched_gamma = 0.1
-    acc_amount = 25
+    acc_amount = 45
     milestones = [2500,4000]
     use_adjust_lr = False
 

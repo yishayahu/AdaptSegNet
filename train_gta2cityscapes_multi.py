@@ -165,7 +165,7 @@ else:
         assert args.mode == 'their'
         config = CC359ConfigTheir()
 if args.exp_name == '':
-    args.exp_name  = args.mode
+    args.exp_name  = args.mode +'_'+ str(args.source) + '_' + str(args.target)
 best_sdice = -1
 low_source_sdice = 1.1
 
