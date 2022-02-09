@@ -47,7 +47,7 @@ class CC359ConfigFinetuneClustering(CC359BaseConfig):
     source_batch_size = 4
     target_batch_size = 12
     n_clusters = 12
-    num_steps = 12000
+    num_steps = 6500
     lr = 5e-6
     use_slice_num = False
     id_to_num_slices = '/home/dsi/shaya/id_to_num_slices.json'
@@ -55,7 +55,7 @@ class CC359ConfigFinetuneClustering(CC359BaseConfig):
     sched = True
     sched_gamma = 0.1
     acc_amount = 35
-    milestones = [7500,10000]
+    milestones = [5000,6000]
     use_adjust_lr = False
 
 @dataclass

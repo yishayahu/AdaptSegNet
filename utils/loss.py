@@ -2,6 +2,8 @@ import torch
 import torch.nn.functional as F
 import torch.nn as nn
 from torch.autograd import Variable
+from torch.nn import BatchNorm2d
+
 
 def freeze_model(model, exclude_layers=('inconv', )):
     for name, param in model.named_parameters():
@@ -11,6 +13,14 @@ def freeze_model(model, exclude_layers=('inconv', )):
                 requires_grad = True
         param.requires_grad = requires_grad
 
+def freeze_norm_stats(model, exclude_layers=('inconv', )):
+    for name, m in model.named_modules():
+        if isinstance(m, BatchNorm2d):
+            m.eval()
+            m.track_running_stats = False
+            for l in exclude_layers:
+                if l in name:
+                    m.train()
 class CrossEntropy2d(nn.Module):
 
     def __init__(self, size_average=True, ignore_label=255):

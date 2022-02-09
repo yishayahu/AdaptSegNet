@@ -30,7 +30,7 @@ from dataset.msm_dataset import MultiSiteMri
 from model.deeplab_multi import DeeplabMulti
 from model.discriminator import FCDiscriminator
 from model.unet import UNet2D
-from utils.loss import CrossEntropy2d, freeze_model
+from utils.loss import CrossEntropy2d, freeze_model, freeze_norm_stats
 import fnmatch
 from configs import *
 
@@ -490,7 +490,7 @@ def get_best_match(sc, tc):
     return best_match
 
 def train_clustering(model,optimizer,scheduler,trainloader,targetloader,val_ds,test_ds,val_ds_source):
-    freeze_model(model,exclude_layers = [ 'init_path', 'down','bottleneck' ])
+    freeze_model(model,exclude_layers = [ 'init_path', 'down','bottleneck.0','bottleneck.1','bottleneck.2','bottleneck.3.conv_path.0'])
     trainloader.dataset.yield_id = True
     targetloader.dataset.yield_id = True
     trainloader_iter = iter(trainloader)
@@ -531,6 +531,7 @@ def train_clustering(model,optimizer,scheduler,trainloader,targetloader,val_ds,t
             model.eval()
         else:
             model.train()
+            freeze_norm_stats(model,exclude_layers = [ 'init_path', 'down','bottleneck.0','bottleneck.1','bottleneck.2','bottleneck.3.conv_path.0'])
         if i_iter % config.epoch_every == 0 and i_iter != 0:
             trainloader_iter = iter(trainloader)
             targetloader_iter = iter(targetloader)
