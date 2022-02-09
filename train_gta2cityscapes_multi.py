@@ -30,7 +30,7 @@ from dataset.msm_dataset import MultiSiteMri
 from model.deeplab_multi import DeeplabMulti
 from model.discriminator import FCDiscriminator
 from model.unet import UNet2D
-from utils.loss import CrossEntropy2d, freeze_model, freeze_norm_stats
+from utils.loss import CrossEntropy2d, freeze_model
 import fnmatch
 from configs import *
 
@@ -570,7 +570,7 @@ def train_clustering(model,optimizer,scheduler,trainloader,targetloader,val_ds,t
             if config.use_slice_num:
                 slices = np.expand_dims(np.array(slices),axis=1)
                 points = np.concatenate([points,slices],axis=1)
-
+            points = t.fit_transform(points)
             source_points,target_points = points[:len(slice_to_feature_source)],points[len(slice_to_feature_source):]
             # source_points,target_points = points[:max(len(slice_to_feature_source),n_clusters)],points[-max(len(slice_to_feature_target),n_clusters):]
             k1 = KMeans(n_clusters=n_clusters,random_state=42)
@@ -579,8 +579,6 @@ def train_clustering(model,optimizer,scheduler,trainloader,targetloader,val_ds,t
             k2 = KMeans(n_clusters=n_clusters,random_state=42,init=k1.cluster_centers_)
             print('doing kmean 2')
             tc = k2.fit_predict(target_points)
-            points = t.fit_transform(points)
-            source_points,target_points = points[:len(slice_to_feature_source)], points[len(slice_to_feature_source):]
             print('getting best match')
             best_matchs_indexes=get_best_match(k1.cluster_centers_,k2.cluster_centers_)
             slice_to_cluster = {}
@@ -664,7 +662,7 @@ def train_clustering(model,optimizer,scheduler,trainloader,targetloader,val_ds,t
             images = Variable(images).to(args.gpu)
 
             _, pred,features = model(images)
-            features = features.mean(1).detach().cpu().numpy()
+            features = features.detach().cpu().numpy()
             for id1,slc_num,feature,img in zip(ids,slice_nums,features,images):
                 slice_to_feature_source[f'{id1}_{slc_num}'] = feature
                 if best_matchs is not None and f'{id1}_{slc_num}' in slice_to_cluster:
@@ -694,7 +692,7 @@ def train_clustering(model,optimizer,scheduler,trainloader,targetloader,val_ds,t
             images = Variable(images).to(args.gpu)
 
             _, __,features = model(images)
-            features = features.mean(1)
+            # features = features.mean(1)
             dist_loss = torch.tensor(0.0,device=args.gpu)
             for id1,slc_num,feature,img in zip(ids,slice_nums,features,images):
                 slice_to_feature_target[f'{id1}_{slc_num}'] = feature.detach().cpu().numpy()
