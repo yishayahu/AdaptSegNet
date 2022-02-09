@@ -44,8 +44,8 @@ class CC359ConfigPretrain(CC359BaseConfig):
 
 @dataclass
 class CC359ConfigFinetuneClustering(CC359BaseConfig):
-    source_batch_size = 4
-    target_batch_size = 12
+    source_batch_size = 8
+    target_batch_size = 8
     n_clusters = 12
     num_steps = 6500
     lr = 5e-6
