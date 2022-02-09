@@ -490,7 +490,7 @@ def get_best_match(sc, tc):
     return best_match
 
 def train_clustering(model,optimizer,scheduler,trainloader,targetloader,val_ds,test_ds,val_ds_source):
-    freeze_model(model,exclude_layers = [ 'init_path', 'down','bottleneck.0','bottleneck.1','bottleneck.2','bottleneck.3.conv_path.0'])
+    freeze_model(model,exclude_layers = ['init_path', 'down','bottleneck.0','bottleneck.1','bottleneck.2','bottleneck.3.conv_path.0','out_path'])
     trainloader.dataset.yield_id = True
     targetloader.dataset.yield_id = True
     trainloader_iter = iter(trainloader)
@@ -531,7 +531,6 @@ def train_clustering(model,optimizer,scheduler,trainloader,targetloader,val_ds,t
             model.eval()
         else:
             model.train()
-            freeze_norm_stats(model,exclude_layers = [ 'init_path', 'down','bottleneck.0','bottleneck.1','bottleneck.2','bottleneck.3.conv_path.0'])
         if i_iter % config.epoch_every == 0 and i_iter != 0:
             trainloader_iter = iter(trainloader)
             targetloader_iter = iter(targetloader)
@@ -577,7 +576,7 @@ def train_clustering(model,optimizer,scheduler,trainloader,targetloader,val_ds,t
             k1 = KMeans(n_clusters=n_clusters,random_state=42)
             print('doing kmean 1')
             sc = k1.fit_predict(source_points)
-            k2 = KMeans(n_clusters=n_clusters,random_state=42)
+            k2 = KMeans(n_clusters=n_clusters,random_state=42,init=k1.cluster_centers_)
             print('doing kmean 2')
             tc = k2.fit_predict(target_points)
             print('getting best match')

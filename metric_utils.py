@@ -29,6 +29,8 @@ def dice(gt,pred):
     return (2*np.sum(g*p))/(np.sum(g)+np.sum(p))
 
 def get_sdice(model,ds,device,config):
+    if config.debug:
+        return 0.5
     loader= data.DataLoader(ds,batch_size=1, shuffle=False)
     model.eval()
     prev_id = None
@@ -61,6 +63,8 @@ def get_sdice(model,ds,device,config):
 
     return float(np.mean(all_sdices))
 def get_dice(model,ds,device,config):
+    if config.debug:
+        return 0.5
     model.eval()
     dices = []
     with torch.no_grad():

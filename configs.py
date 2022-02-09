@@ -49,7 +49,7 @@ class CC359ConfigFinetuneClustering(CC359BaseConfig):
     n_clusters = 12
     num_steps = 6500
     lr = 5e-6
-    use_slice_num = False
+    use_slice_num = True
     id_to_num_slices = '/home/dsi/shaya/id_to_num_slices.json'
     dist_loss_lambda = 2
     sched = True
@@ -61,19 +61,20 @@ class CC359ConfigFinetuneClustering(CC359BaseConfig):
 @dataclass
 class DebugConfigCC359(CC359BaseConfig):
     n_clusters = 2
-    source_batch_size = 2
-    target_batch_size = 2
+    source_batch_size = 4
+    target_batch_size = 4
     lr = 1e-5
-    data_len = 3
+    data_len = 1
     save_pred_every =  5
     debug= True
-    epoch_every = 20
-    num_steps = 50
+    epoch_every = 40
+    num_steps = 200
     dist_loss_lambda = 0.1
     use_slice_num = True
     id_to_num_slices = '/home/dsi/shaya/id_to_num_slices.json'
     sched = False
     use_adjust_lr = False
+    acc_amount = 4
 
 
 
