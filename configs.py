@@ -27,10 +27,10 @@ class CC359ConfigTheir(CC359BaseConfig):
     source_batch_size = 8
     target_batch_size = 8
     num_steps = 5000
-    lr = 1e-4
+    lr = 5e-6
     sched = True
     sched_gamma = 0.1
-    milestones = [3500,5000,6500]
+    milestones = [3500,4500]
 
 @dataclass
 class CC359ConfigPretrain(CC359BaseConfig):
