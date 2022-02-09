@@ -26,11 +26,11 @@ class AdabnCC359Config(CC359BaseConfig):
 class CC359ConfigTheir(CC359BaseConfig):
     source_batch_size = 8
     target_batch_size = 8
-    num_steps = 5000
+    num_steps = 6500
     lr = 5e-6
     sched = True
     sched_gamma = 0.1
-    milestones = [3500,4500]
+    milestones = [5000,6000]
 
 @dataclass
 class CC359ConfigPretrain(CC359BaseConfig):

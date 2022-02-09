@@ -167,7 +167,7 @@ else:
         assert args.mode == 'their'
         config = CC359ConfigTheir()
 if args.exp_name == '':
-    args.exp_name  = args.mode +'_'+ str(args.source) + '_' + str(args.target)
+    args.exp_name  = args.mode #+'_'+ str(args.source) + '_' + str(args.target)
 best_sdice = -1
 low_source_sdice = 1.1
 
@@ -863,7 +863,7 @@ def main():
         wandb.init(
             project=project,
             id=wandb.util.generate_id(),
-            name=args.exp_name,
+            name=args.exp_name+'_'+ str(args.source) + '_' + str(args.target),
             dir='..'
         )
     trainloader = data.DataLoader(source_ds,batch_size=config.source_batch_size, shuffle=True, num_workers=args.num_workers,pin_memory=True)
