@@ -719,11 +719,19 @@ def train_clustering(model,optimizer,scheduler,trainloader,targetloader,val_ds,t
                 if np.sum(lens1) > config.acc_amount:
                     use_dist_loss = True
                 if use_dist_loss:
+                    total_amount = 0
+                    dist_losses = [0] * len(accumulate_for_loss)
                     for i,features in enumerate(accumulate_for_loss):
                         if len(features) > 0:
+                            curr_amount = len(features)
+                            total_amount+=curr_amount
                             features = torch.mean(torch.stack(features),dim=0)
-                            dist_loss += torch.mean((features - best_matchs[i].to(args.gpu))**2)
+                            dist_losses[i] = torch.mean((features - best_matchs[i].to(args.gpu))**2) * curr_amount
                             accumulate_for_loss[i] = []
+                    dist_losses = np.array(dist_losses) / total_amount
+                    for l  in dist_losses:
+                        if l >0:
+                            dist_loss+=l
             dist_loss *= dist_loss_lambda
             if float(dist_loss) > 0:
                 epoch_dist_loss.append(float(dist_loss))
