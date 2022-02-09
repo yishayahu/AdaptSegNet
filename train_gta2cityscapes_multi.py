@@ -531,7 +531,7 @@ def train_clustering(model,optimizer,scheduler,trainloader,targetloader,val_ds,t
             model.eval()
         else:
             model.train()
-        if i_iter % config.epoch_every == 0 and i_iter != 0:
+        if i_iter == config.epoch_every:
             trainloader_iter = iter(trainloader)
             targetloader_iter = iter(targetloader)
             source_clusters = []
