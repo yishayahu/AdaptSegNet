@@ -570,7 +570,7 @@ def train_clustering(model,optimizer,scheduler,trainloader,targetloader,val_ds,t
             if config.use_slice_num:
                 slices = np.expand_dims(np.array(slices),axis=1)
                 points = np.concatenate([points,slices],axis=1)
-            points = t.fit_transform(points)
+
             source_points,target_points = points[:len(slice_to_feature_source)],points[len(slice_to_feature_source):]
             # source_points,target_points = points[:max(len(slice_to_feature_source),n_clusters)],points[-max(len(slice_to_feature_target),n_clusters):]
             k1 = KMeans(n_clusters=n_clusters,random_state=42)
@@ -579,6 +579,8 @@ def train_clustering(model,optimizer,scheduler,trainloader,targetloader,val_ds,t
             k2 = KMeans(n_clusters=n_clusters,random_state=42,init=k1.cluster_centers_)
             print('doing kmean 2')
             tc = k2.fit_predict(target_points)
+            points = t.fit_transform(points)
+            source_points,target_points = points[:len(slice_to_feature_source)], points[len(slice_to_feature_source):]
             print('getting best match')
             best_matchs_indexes=get_best_match(k1.cluster_centers_,k2.cluster_centers_)
             slice_to_cluster = {}
@@ -722,9 +724,9 @@ def train_clustering(model,optimizer,scheduler,trainloader,targetloader,val_ds,t
                     for i,features in enumerate(accumulate_for_loss):
                         if len(features) > 0:
                             features = torch.mean(torch.stack(features),dim=0)
-                            dist_loss+= torch.mean((features - best_matchs[i].to(args.gpu))**2)
+                            dist_loss += torch.mean((features - best_matchs[i].to(args.gpu))**2)
                             accumulate_for_loss[i] = []
-            dist_loss*= dist_loss_lambda
+            dist_loss *= dist_loss_lambda
             if float(dist_loss) > 0:
                 epoch_dist_loss.append(float(dist_loss))
             epoch_seg_loss.append(float(loss))
