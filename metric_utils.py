@@ -5,9 +5,10 @@ from torch.utils import data
 from tqdm import tqdm
 import surface_distance.metrics as surf_dc
 from torch.autograd import Variable
-def sdice(a, b, spacing, tolerance=1):
-    surface_distances = surf_dc.compute_surface_distances(a, b, spacing)
-    return surf_dc.compute_surface_dice_at_tolerance(surface_distances, tolerance)
+def sdice(gt, pred, spacing, tolerance=1):
+    surface_distances = surf_dc.compute_surface_distances(gt, pred, spacing)
+
+    return surf_dc.compute_surface_dice_at_tolerance(surface_distances, tolerance),dice(gt,pred)
 
 
 def _connectivity_region_analysis(mask):
@@ -38,6 +39,7 @@ def get_sdice(model,ds,device,config):
     all_preds = []
     done_ids = set()
     all_sdices = []
+    all_dices = []
     with torch.no_grad():
 
         for images,segs,ids,slc_num in tqdm(loader,desc='running test loader'):
@@ -54,14 +56,16 @@ def get_sdice(model,ds,device,config):
                 id1_str = str(id1)
                 while len(id1_str) < 3:
                     id1_str = '0' + id1_str
-                all_sdices.append(sdice(np.stack(all_segs),np.stack(all_preds),ds.spacing_loader('CC0'+id1_str)))
+                sdice1,dice1 = sdice(np.stack(all_segs),np.stack(all_preds),ds.spacing_loader('CC0'+id1_str))
+                all_sdices.append(sdice1)
+                all_dices.append(dice1)
                 all_preds = []
                 all_segs = []
             prev_id = id1
             all_preds.append(output[0])
             all_segs.append(segs[0])
 
-    return float(np.mean(all_sdices))
+    return float(np.mean(all_dices)),float(np.mean(all_sdices))
 def get_dice(model,ds,device,config):
     if config.debug:
         return 0.5
@@ -76,4 +80,4 @@ def get_dice(model,ds,device,config):
             output = np.asarray(np.argmax(output, axis=1), dtype=np.uint8).astype(bool)
             output = _connectivity_region_analysis(output)
             dices.append(dice(segs,output))
-    return float(np.mean(dices))
+    return float(np.mean(dices)),0

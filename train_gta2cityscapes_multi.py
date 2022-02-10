@@ -168,8 +168,8 @@ else:
         config = CC359ConfigTheir()
 if args.exp_name == '':
     args.exp_name  = args.mode #+'_'+ str(args.source) + '_' + str(args.target)
-best_sdice = -1
-low_source_sdice = 1.1
+best_metric = -1
+low_source_metric = 1.1
 
 def loss_calc(pred, label, gpu):
     """
@@ -203,30 +203,33 @@ def adjust_learning_rate_D(optimizer, i_iter):
 
 def after_step(num_step,val_ds,test_ds,model,val_ds_source):
 
-
-    metric = 'dice' if config.msm else 'sdice'
-    global best_sdice
-    global low_source_sdice
+    global best_metric
+    global low_source_metric
     if num_step % config.save_pred_every == 0 and num_step!= 0:
         if config.msm:
-            sdice1 = get_dice(model,val_ds,args.gpu,config)
+            dice1,sdice1 = get_dice(model,val_ds,args.gpu,config)
+            main_metric = dice1
         else:
-            sdice1 = get_sdice(model,val_ds,args.gpu,config)
+            dice1,sdice1 = get_sdice(model,val_ds,args.gpu,config)
+            main_metric = sdice1
         if val_ds_source is not None:
             if config.msm:
-                sdice_source = get_dice(model,val_ds_source,args.gpu,config)
+                dice_source,sdice_source = get_dice(model,val_ds_source,args.gpu,config)
+                main_metric_source = dice_source
             else:
-                sdice_source = get_sdice(model,val_ds_source,args.gpu,config)
-            if sdice_source < low_source_sdice:
-                low_source_sdice = sdice_source
+                dice_source,sdice_source = get_sdice(model,val_ds_source,args.gpu,config)
+                main_metric_source = sdice_source
+            if main_metric_source < low_source_metric:
+                low_source_metric = main_metric_source
                 torch.save(model.state_dict(), config.exp_dir / f'low_source_model.pth')
-            wandb.log({f'{metric}/val_source':sdice_source},step=num_step)
-        wandb.log({f'{metric}/val':sdice1},step=num_step)
-        print(f'{metric} is ',sdice1)
+            wandb.log({f'dice/val_source':dice_source,f'sdice/val_source':sdice_source},step=num_step)
+        wandb.log({f'dice/val':dice1,f'sdice/val':sdice1},step=num_step)
+        print(f'dice is ',dice1)
+        print(f'sdice is ',sdice1)
         print ('taking snapshot ...')
 
-        if sdice1 > best_sdice:
-            best_sdice = sdice1
+        if main_metric > best_metric:
+            best_metric = main_metric
             torch.save(model.state_dict(), config.exp_dir / f'best_model.pth')
 
         torch.save(model.state_dict(), config.exp_dir / f'model.pth')
@@ -234,24 +237,27 @@ def after_step(num_step,val_ds,test_ds,model,val_ds_source):
         title = 'end' if num_step != 0 else 'start'
         scores = {}
         if config.msm:
-            sdice_test = get_dice(model,test_ds,args.gpu,config)
+            dice_test,sdice_test = get_dice(model,test_ds,args.gpu,config)
         else:
-            sdice_test = get_sdice(model,test_ds,args.gpu,config)
-        scores[f'{metric}_{title}/test'] = sdice_test
+            dice_test,sdice_test = get_sdice(model,test_ds,args.gpu,config)
+        scores[f'dice_{title}/test'] = dice_test
+        scores[f'sdice_{title}/test'] = sdice_test
         if num_step != 0:
             model.load_state_dict(torch.load(config.exp_dir / f'best_model.pth',map_location='cpu'))
             if config.msm:
-                sdice_test_best = get_dice(model,test_ds,args.gpu,config)
+                dice_test_best,sdice_test_best = get_dice(model,test_ds,args.gpu,config)
             else:
-                sdice_test_best =get_sdice(model,test_ds,args.gpu,config)
-            scores[f'{metric}_{title}/test_best'] = sdice_test_best
+                dice_test_best,sdice_test_best =get_sdice(model,test_ds,args.gpu,config)
+            scores[f'dice_{title}/test_best'] = dice_test_best
+            scores[f'sdice_{title}/test_best'] = sdice_test_best
             if val_ds_source is not None:
                 model.load_state_dict(torch.load(config.exp_dir / f'low_source_model.pth',map_location='cpu'))
                 if config.msm:
-                    sdice_test_low_source = get_dice(model,test_ds,args.gpu,config)
+                    dice_test_low_source,sdice_test_low_source = get_dice(model,test_ds,args.gpu,config)
                 else:
-                    sdice_test_low_source =get_sdice(model,test_ds,args.gpu,config)
-                scores[f'{metric}_{title}/test_low_source_on_target'] = sdice_test_low_source
+                    dice_test_low_source,sdice_test_low_source =get_sdice(model,test_ds,args.gpu,config)
+                scores[f'dice_{title}/test_low_source_on_target'] = dice_test_low_source
+                scores[f'sdice_{title}/test_low_source_on_target'] = sdice_test_low_source
 
         wandb.log(scores,step=num_step)
         json.dump(scores,open(config.exp_dir/f'scores_{title}.json','w'))

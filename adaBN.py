@@ -34,7 +34,6 @@ def loss_calc(pred, label, gpu):
     return criterion(pred, label)
 
 def run_adaBN(source, target, device):
-    metric = 'dice' if config.msm else 'sdice'
     ckpt_path = Path(config.base_res_path) / f'source_{source}' / 'pretrain' / 'best_model.pth'
     model = UNet2D(config.n_channels)
     state_dict = torch.load(ckpt_path,map_location='cpu')
@@ -53,8 +52,8 @@ def run_adaBN(source, target, device):
         test_ds = MultiSiteMri(load(f'{config.base_splits_path}/site_{target}/test_ids.json'),test=True)
         epochs = 10
     else:
-        target_ds = CC359Ds(load(f'{config.base_splits_path}/site_{target}/train_ids.json'))
-        test_ds = CC359Ds(load(f'{config.base_splits_path}/site_{target}/test_ids.json'),slicing_interval=1,yield_id=True)
+        target_ds = CC359Ds(load(f'{config.base_splits_path}/site_{target}/train_ids.json'),site=target)
+        test_ds = CC359Ds(load(f'{config.base_splits_path}/site_{target}/test_ids.json'),site=target,slicing_interval=1,yield_id=True)
         epochs = 1
     targetloader = data.DataLoader(target_ds, batch_size=config.batch_size, shuffle=True)
     model.train()
@@ -71,14 +70,16 @@ def run_adaBN(source, target, device):
                 # loss_seg1 = loss_calc(pred1, labels, args.gpu)
     print(np.mean(first_pred))
     if config.msm:
-        sdice_test = get_dice(model,test_ds,device,config)
+        dice1,sdice1 = get_dice(model,test_ds,device,config)
+        main_metric = dice1
     else:
-        sdice_test = get_sdice(model,test_ds,device,config)
+        dice1,sdice1 = get_sdice(model,test_ds,device,config)
+        main_metric = sdice1
     p1 = Path(f'{config.base_res_path}/source_{source}_target_{target}/adaBN/')
     p1.mkdir(parents=True, exist_ok=True)
     torch.save(model.state_dict(),f'{config.base_res_path}/source_{source}_target_{target}/adaBN/model.pth')
-    print(sdice_test)
-    json.dump({f"{metric}/test": sdice_test, f"{metric}/test_best":sdice_test},open(p1 / 'scores_end.json','w'))
+    print(main_metric)
+    json.dump({f"dice/test": dice1, f"dice/test_best":dice1,f"sdice/test": sdice1, f"sdice/test_best":sdice1},open(p1 / 'scores_end.json','w'))
 
 
 def main():
