@@ -2,6 +2,7 @@ import argparse
 import dataclasses
 import json
 import os
+import pickle
 import shutil
 from pathlib import Path
 import PIL
@@ -646,6 +647,8 @@ def train_clustering(model,optimizer,scheduler,trainloader,targetloader,val_ds,t
             im_path_clusters = str(config.exp_dir /  f'{i_iter}_clusters.png')
             fig = plt.figure()
             ax = fig.add_subplot()
+            pickle.dump(k1.cluster_centers_,open(config.exp_dir/f'source_cluster_centers_{i_iter}.p','wb'))
+            pickle.dump(k2.cluster_centers_,open(config.exp_dir/f'target_cluster_centers_{i_iter}.p','wb'))
             for i,(p,marker) in enumerate([(k1.cluster_centers_,'.'),(k2.cluster_centers_,'^')]):
                 if i ==0:
                     ax.scatter(p[:,0],p[:,1],marker = marker,c=colors[:len(p)])

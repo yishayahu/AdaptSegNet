@@ -64,7 +64,7 @@ class DebugConfigCC359(CC359BaseConfig):
     source_batch_size = 4
     target_batch_size = 4
     lr = 1e-5
-    data_len = 1
+    data_len = 10
     save_pred_every =  5
     debug= True
     epoch_every = 40

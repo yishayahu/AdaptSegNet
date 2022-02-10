@@ -32,7 +32,7 @@ def dice(gt,pred):
 
 def get_sdice(model,ds,device,config):
     if config.debug:
-        return 0.5
+        return 0.5,0.6
     loader= data.DataLoader(ds,batch_size=1, shuffle=False)
     model.eval()
     prev_id = None
@@ -69,7 +69,7 @@ def get_sdice(model,ds,device,config):
     return float(np.mean(all_dices)),float(np.mean(all_sdices))
 def get_dice(model,ds,device,config):
     if config.debug:
-        return 0.5
+        return 0.5,0.6
     model.eval()
     dices = []
     with torch.no_grad():
