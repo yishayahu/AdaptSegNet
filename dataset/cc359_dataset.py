@@ -11,7 +11,7 @@ from dpipe.im.shape_ops import zoom
 from dpipe.dataset.segmentation import SegmentationFromCSV
 from dpipe.dataset.wrappers import Proxy
 
-from paths import ccc359_data_path
+from paths import ccc359_data_path, cc359_splits_dir
 
 SPATIAL_DIMS = (-3, -2, -1)
 def extract_patch(inputs, x_patch_size, y_patch_size, spatial_dims=SPATIAL_DIMS):
@@ -112,6 +112,7 @@ class Rescale3D(Change):
         return np.nan_to_num(scale_factor, nan=1)
 
     def _change(self, x, i):
+        return zoom(x, self._scale_factor(i), order=self.order)
         return x
 
 
@@ -126,13 +127,20 @@ class Rescale3D(Change):
 
 
 class CC359Ds(torch.utils.data.Dataset):
-    def __init__(self,ids,yield_id=False,slicing_interval=1,exp_dir=''):
+    def __init__(self,ids,site,yield_id=False,slicing_interval=1):
         self.slicing_interval = slicing_interval
         voxel_spacing = (1, 0.95, 0.95)
         preprocessed_dataset = apply(Rescale3D(CC359(ccc359_data_path), voxel_spacing), load_image=scale_mri)
         ds = apply(cache_methods(apply(preprocessed_dataset, load_image=np.float16)), load_image=np.float32)
-        self.image_loader = ds.load_image
-        self.seg_loader = ds.load_segm
+        all_img_segs_dict_path = cc359_splits_dir / f'site_{site}'/'all_img_segs.p'
+        if all_img_segs_dict_path.exists():
+            self.all_img_segs_dict = pickle.load(open(all_img_segs_dict_path,'rb'))
+            self.image_loader = lambda i: self.all_img_segs_dict[i][0]
+            self.seg_loader = lambda i: self.all_img_segs_dict[i][1]
+        else:
+            self.all_img_segs_dict = None
+            self.image_loader = ds.load_image
+            self.seg_loader = ds.load_segm
         self.spacing_loader = ds.load_spacing
         self.len_ds = 0
         self.yield_id = yield_id

@@ -433,8 +433,8 @@ def train_pretrain(model,optimizer,scheduler,trainloader):
         val_ds = MultiSiteMri(load(f'{config.base_splits_path}/site_{args.source}t/val_ids.json'),yield_id=True,test=True)
         test_ds = MultiSiteMri(load(f'{config.base_splits_path}/site_{args.source}t/test_ids.json'),yield_id=True,test=True)
     else:
-        val_ds = CC359Ds(load(f'{config.base_splits_path}/site_{args.source}/val_ids.json'),yield_id=True,slicing_interval=1)
-        test_ds = CC359Ds(load(f'{config.base_splits_path}/site_{args.source}/test_ids.json'),yield_id=True,slicing_interval=1)
+        val_ds = CC359Ds(load(f'{config.base_splits_path}/site_{args.source}/val_ids.json'),site=args.source,yield_id=True,slicing_interval=1)
+        test_ds = CC359Ds(load(f'{config.base_splits_path}/site_{args.source}/test_ids.json'),site=args.source,yield_id=True,slicing_interval=1)
     trainloader_iter = iter(trainloader)
     for i_iter in range(config.num_steps):
         model.train()
@@ -573,7 +573,7 @@ def train_clustering(model,optimizer,scheduler,trainloader,targetloader,val_ds,t
             points = t.fit_transform(points)
             source_points,target_points = points[:len(slice_to_feature_source)],points[len(slice_to_feature_source):]
             # source_points,target_points = points[:max(len(slice_to_feature_source),n_clusters)],points[-max(len(slice_to_feature_target),n_clusters):]
-            k1 = KMeans(n_clusters=n_clusters,random_state=42)
+            k1 = KMeans(n_clusters=n_clusters,random_state=42,n_init=30,max_iter=1000,tol=1e-6)
             print('doing kmean 1')
             sc = k1.fit_predict(source_points)
             k2 = KMeans(n_clusters=n_clusters,random_state=42,init=k1.cluster_centers_)
@@ -595,13 +595,16 @@ def train_clustering(model,optimizer,scheduler,trainloader,targetloader,val_ds,t
             for i in range(len(best_matchs_indexes)):
                 best_matchs.append(torch.tensor(source_clusters[best_matchs_indexes[i]]))
 
-            cm = plt.get_cmap('gist_rainbow')
-            cNorm  = mplcolors.Normalize(vmin=0, vmax=n_clusters-1)
-            scalarMap = mplcm.ScalarMappable(norm=cNorm, cmap=cm)
-            colors = []
-            for i in range(n_clusters):
-                colors.append(scalarMap.to_rgba(i))
-
+            # cm = plt.get_cmap('gist_rainbow')
+            # cNorm  = mplcolors.Normalize(vmin=0, vmax=n_clusters-1)
+            # scalarMap = mplcm.ScalarMappable(norm=cNorm, cmap=cm)
+            # colors = []
+            # for i in range(n_clusters):
+            #     colors.append(scalarMap.to_rgba(i))
+            colors = ['black','blue','cyan','red','orange'
+                ,'tomato','lime','gold','magenta','dodgerblue'
+                ,'peru','grey','brown','olive','navy'
+                ,'blueviolet','darkgreen','maroon','yellow','cadetblue']
             im_path_source =str(config.exp_dir /  f'{i_iter}_source.png')
             fig = plt.figure()
             ax = fig.add_subplot()
@@ -846,11 +849,11 @@ def main():
         test_ds = MultiSiteMri(load(f'{config.base_splits_path}/site_{args.target}/test_ids.json'),yield_id=True,test=True)
         project = 'adaptSegUNetMsm'
     else:
-        source_ds = CC359Ds(load(f'{config.base_splits_path}/site_{args.source}/train_ids.json')[:config.data_len])
-        target_ds = CC359Ds(load(f'{config.base_splits_path}/site_{args.target}/train_ids.json')[:config.data_len])
-        val_ds = CC359Ds(load(f'{config.base_splits_path}/site_{args.target}/test_ids.json'),yield_id=True,slicing_interval=1)
-        val_ds_source = CC359Ds(load(f'{config.base_splits_path}/site_{args.source}/val_ids.json'),yield_id=True,slicing_interval=1)
-        test_ds = CC359Ds(load(f'{config.base_splits_path}/site_{args.target}/test_ids.json'),yield_id=True,slicing_interval=1)
+        source_ds = CC359Ds(load(f'{config.base_splits_path}/site_{args.source}/train_ids.json')[:config.data_len],site=args.source)
+        target_ds = CC359Ds(load(f'{config.base_splits_path}/site_{args.target}/train_ids.json')[:config.data_len],site=args.target)
+        val_ds = CC359Ds(load(f'{config.base_splits_path}/site_{args.target}/test_ids.json'),site=args.target,yield_id=True,slicing_interval=1)
+        val_ds_source = CC359Ds(load(f'{config.base_splits_path}/site_{args.source}/val_ids.json'),site=args.source,yield_id=True,slicing_interval=1)
+        test_ds = CC359Ds(load(f'{config.base_splits_path}/site_{args.target}/test_ids.json'),site=args.target,yield_id=True,slicing_interval=1)
         project = 'adaptSegUNet'
     if config.debug:
         wandb.init(
