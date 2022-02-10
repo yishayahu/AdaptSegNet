@@ -25,10 +25,12 @@ from spottunet.paths import st_splits_dir, st_res_dir, msm_res_dir, msm_splits_d
 from configs import *
 
 
-def find_available_device(my_devices, running_now):
+def find_available_device(my_devices, running_now,exp_name):
     if torch.cuda.is_available():
-
-        wanted_free_mem = 26 * 2 ** 30  # at least 26 GB avail
+        if 'cluster' in exp_name:
+            wanted_free_mem = 26 * 2 ** 30  # at least 26 GB avail
+        else:
+            wanted_free_mem = 16 * 2 ** 30
         while True:
             for device_num in range(nvmlDeviceGetCount()):
                 if device_num in my_devices:
@@ -88,7 +90,7 @@ def run_cross_validation(experiments, combs, only_stats=False):
             if not src_ckpt_path.exists():
                 if only_stats:
                     continue
-                curr_device = find_available_device(my_devices, running_now)
+                curr_device = find_available_device(my_devices, running_now,'pretrain')
                 print(f'training on source {source} to create {src_ckpt_path}')
                 cmd = f'python train_gta2cityscapes_multi.py --source {source} --target {target} --mode pretrain --gpu {curr_device} >  errs_and_outs/pretrain{source}_logs_out.txt 2> errs_and_outs/pretarin{source}_logs_err.txt'
                 print(cmd)
@@ -101,7 +103,7 @@ def run_cross_validation(experiments, combs, only_stats=False):
             if not os.path.exists(scores_path):
                 if only_stats:
                     continue
-                curr_device = find_available_device(my_devices, running_now)
+                curr_device = find_available_device(my_devices, running_now,exp)
                 exp_dir_path = f'{base_res_dir}/source_{source}_target_{target}/{exp}'
                 if os.path.exists(exp_dir_path):
                     shutil.rmtree(exp_dir_path, ignore_errors=True)
@@ -141,10 +143,10 @@ def run_cross_validation(experiments, combs, only_stats=False):
 
 
 def main():
-    experiments = ['clustering_finetune','their']
+    experiments = ['clustering_finetune','their','adaBN']
     combs = list(itertools.permutations(range(6), 2))
     random.shuffle(combs)
-    combs = [(0, 4), (3, 1), (2, 5), (2, 3),(1,3)]
+    combs = [(1,3),(0, 4), (3, 1), (2, 5), (2, 3)]
     run_cross_validation(only_stats=False, experiments=experiments, combs=combs)
 
 

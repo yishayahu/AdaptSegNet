@@ -9,7 +9,7 @@ class CC359BaseConfig:
     data_len = 45
     input_size = (256,256)
     base_splits_path ='/home/dsi/shaya/unsup_splits/'
-    base_res_path = '/home/dsi/shaya/unsup_resres/'
+    base_res_path = '/home/dsi/shaya/unsup_resres_zoom/'
     msm = False
     n_channels = 1
     save_pred_every =  500
