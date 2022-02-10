@@ -134,10 +134,12 @@ class CC359Ds(torch.utils.data.Dataset):
         ds = apply(cache_methods(apply(preprocessed_dataset, load_image=np.float16)), load_image=np.float32)
         all_img_segs_dict_path = cc359_splits_dir / f'site_{site}'/'all_img_segs.p'
         if all_img_segs_dict_path.exists():
+            print('using all dict')
             self.all_img_segs_dict = pickle.load(open(all_img_segs_dict_path,'rb'))
             self.image_loader = lambda i: self.all_img_segs_dict[i][0]
             self.seg_loader = lambda i: self.all_img_segs_dict[i][1]
         else:
+            assert False # todo: remove
             self.all_img_segs_dict = None
             self.image_loader = ds.load_image
             self.seg_loader = ds.load_segm
