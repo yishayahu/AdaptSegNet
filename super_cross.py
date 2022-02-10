@@ -92,7 +92,7 @@ def run_cross_validation(experiments, combs, only_stats=False):
                     continue
                 curr_device = find_available_device(my_devices, running_now,'pretrain')
                 print(f'training on source {source} to create {src_ckpt_path}')
-                cmd = f'python train_gta2cityscapes_multi.py --source {source} --target {target} --mode pretrain --gpu {curr_device} >  errs_and_outs/pretrain{source}_logs_out.txt 2> errs_and_outs/pretarin{source}_logs_err.txt'
+                cmd = f'python train_gta2cityscapes_multi.py --source {source} --target {source} --mode pretrain --gpu {curr_device} >  errs_and_outs/pretrain{source}_logs_out.txt 2> errs_and_outs/pretarin{source}_logs_err.txt'
                 print(cmd)
                 my_devices.append(curr_device)
                 subprocess.run(
