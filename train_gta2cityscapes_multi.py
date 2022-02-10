@@ -502,6 +502,7 @@ def train_clustering(model,optimizer,scheduler,trainloader,targetloader,val_ds,t
     trainloader_iter = iter(trainloader)
     targetloader_iter = iter(targetloader)
     dist_loss_lambda = config.dist_loss_lambda
+    dist_loss_normalization = None
     n_clusters = config.n_clusters
     slice_to_cluster = None
     source_clusters = None
@@ -579,7 +580,7 @@ def train_clustering(model,optimizer,scheduler,trainloader,targetloader,val_ds,t
             points = t.fit_transform(points)
             source_points,target_points = points[:len(slice_to_feature_source)],points[len(slice_to_feature_source):]
             # source_points,target_points = points[:max(len(slice_to_feature_source),n_clusters)],points[-max(len(slice_to_feature_target),n_clusters):]
-            k1 = KMeans(n_clusters=n_clusters,random_state=42,n_init=30,max_iter=1000,tol=1e-6)
+            k1 = KMeans(n_clusters=n_clusters,random_state=42)
             print('doing kmean 1')
             sc = k1.fit_predict(source_points)
             k2 = KMeans(n_clusters=n_clusters,random_state=42,init=k1.cluster_centers_)
@@ -741,9 +742,15 @@ def train_clustering(model,optimizer,scheduler,trainloader,targetloader,val_ds,t
                         if l >0:
                             dist_loss+=l
                     dist_loss/= total_amount
-            dist_loss *= dist_loss_lambda
+            if dist_loss_normalization is not None:
+                dist_loss/=dist_loss_normalization
+                dist_loss*=dist_loss_lambda
             if float(dist_loss) > 0:
                 epoch_dist_loss.append(float(dist_loss))
+                if dist_loss_normalization is None and len(epoch_dist_loss) > 5:
+                    dist_loss_normalization = np.mean(epoch_dist_loss)
+                    epoch_dist_loss = []
+                    print(f'dist loss n is :{dist_loss_normalization}')
             epoch_seg_loss.append(float(loss))
             losses_dict = {'seg_loss': loss,'dist_loss':dist_loss,'total':loss+dist_loss}
             if accumulate_for_loss is None:
@@ -866,7 +873,7 @@ def main():
             project='spot3',
             id=wandb.util.generate_id(),
             name=args.exp_name,
-            dir='..'
+            dir='../debug_wandb'
         )
     else:
         wandb.init(

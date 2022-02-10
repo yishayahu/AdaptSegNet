@@ -22,7 +22,8 @@ def _connectivity_region_analysis(mask):
 
     return label_im
 def dice(gt,pred):
-    gt = gt.squeeze(1)
+    if gt.shape != pred.shape:
+        gt = gt.squeeze(1)
     g = np.zeros(gt.shape)
     p = np.zeros(pred.shape)
     g[gt == 1] = 1

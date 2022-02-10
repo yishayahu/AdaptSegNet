@@ -136,6 +136,11 @@ class CC359Ds(torch.utils.data.Dataset):
         if all_img_segs_dict_path.exists():
             print('using all dict')
             self.all_img_segs_dict = pickle.load(open(all_img_segs_dict_path,'rb'))
+            temp_dict = {}
+            for i,val in self.all_img_segs_dict.items():
+                if i in ids:
+                    temp_dict[i] = val
+            self.all_img_segs_dict = temp_dict
             self.image_loader = lambda i: self.all_img_segs_dict[i][0]
             self.seg_loader = lambda i: self.all_img_segs_dict[i][1]
         else:
