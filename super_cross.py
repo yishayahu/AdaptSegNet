@@ -43,7 +43,7 @@ def find_available_device(my_devices, running_now,exp_name):
             print(f'looking for device my device is {my_devices}')
             places = [x[0] for x in running_now]
             print(places)
-            time.sleep(10)
+            time.sleep(600)
     else:
         return 'cpu'
 
