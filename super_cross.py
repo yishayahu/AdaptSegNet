@@ -40,10 +40,11 @@ def find_available_device(my_devices, running_now,exp_name):
                 gpu_utilize = nvmlDeviceGetUtilizationRates(h)
                 if info.free > wanted_free_mem and gpu_utilize.gpu < 3:
                     return device_num
-            print(f'looking for device my device is {my_devices}')
-            places = [x[0] for x in running_now]
-            print(places)
-            time.sleep(600)
+            if random.random() < 0.02:
+                print(f'looking for device my device is {my_devices}')
+                places = [x[0] for x in running_now]
+                print(places)
+            time.sleep(10)
     else:
         return 'cpu'
 
@@ -145,7 +146,6 @@ def run_cross_validation(experiments, combs, only_stats=False):
 def main():
     experiments = ['clustering_finetune','their','adaBN']
     combs = list(itertools.permutations(range(6), 2))
-    random.shuffle(combs)
     # combs = [(1,3),(0, 4), (3, 1), (2, 5), (2, 3)]
     run_cross_validation(only_stats=False, experiments=experiments, combs=combs)
 
