@@ -27,6 +27,7 @@ def extract_patch(inputs, x_patch_size, y_patch_size, spatial_dims=SPATIAL_DIMS)
     return x_patch, y_patch
 def sample_center_uniformly(shape, patch_size, spatial_dims):
     spatial_shape = np.array(shape)[list(spatial_dims)]
+    return spatial_shape // 2
     if np.all(patch_size <= spatial_shape):
         return sample_box_center_uniformly(shape=spatial_shape, box_size=patch_size)
     else:
