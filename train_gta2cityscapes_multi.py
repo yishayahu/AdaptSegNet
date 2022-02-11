@@ -870,7 +870,7 @@ def main():
         val_ds = CC359Ds(load(f'{config.base_splits_path}/site_{args.target}/test_ids.json'),site=args.target,yield_id=True,slicing_interval=1)
         val_ds_source = CC359Ds(load(f'{config.base_splits_path}/site_{args.source}/val_ids.json'),site=args.source,yield_id=True,slicing_interval=1)
         test_ds = CC359Ds(load(f'{config.base_splits_path}/site_{args.target}/test_ids.json'),site=args.target,yield_id=True,slicing_interval=1)
-        project = 'adaptSegUNet'
+        project = 'adaptSegUNetNoRand'
     if config.debug:
         wandb.init(
             project='spot3',
