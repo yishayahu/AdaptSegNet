@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 from scipy import ndimage
+from torch import nn
 from torch.utils import data
 from tqdm import tqdm
 import surface_distance.metrics as surf_dc
@@ -30,6 +31,18 @@ def dice(gt,pred):
     p[pred == 1] = 1
     return (2*np.sum(g*p))/(np.sum(g)+np.sum(p))
 
+def dice_torch(gt,pred,smooth=0):
+    if gt.shape != pred.shape:
+        gt = gt.squeeze(1)
+    g = torch.zeros(gt.shape)
+    p = torch.zeros(pred.shape)
+    g[gt == 1] = 1
+    p[pred == 1] = 1
+    return (2*torch.sum(g*p)+smooth)/(torch.sum(g)+torch.sum(p)+smooth)
+
+
+
+
 def get_sdice(model,ds,device,config):
     if config.debug:
         return 0.5,0.6
@@ -46,8 +59,12 @@ def get_sdice(model,ds,device,config):
         for images,segs,ids,slc_num in tqdm(loader,desc='running test loader'):
             id1 = int(ids[0])
             _, output = model(images.to(device))
-            output = output.cpu().data.numpy()
-            output = np.asarray(np.argmax(output, axis=1), dtype=np.uint8).astype(bool)
+            if output.shape[1] == 2:
+                output = output.cpu().data.numpy()
+                output = np.asarray(np.argmax(output, axis=1), dtype=np.uint8).astype(bool)
+            else:
+                assert output.shape[1] == 1
+                output = (nn.Sigmoid()(output) > 0.5).squeeze(1).cpu().data.numpy()
             segs = segs.squeeze(1).numpy().astype(bool)
             if prev_id is None:
                 prev_id = id1
@@ -77,8 +94,12 @@ def get_dice(model,ds,device,config):
             segs = ds.patches_Allmasks[id1]
             images = Variable(torch.tensor(images)).to(device)
             _, output = model(images)
-            output = output.cpu().data.numpy()
-            output = np.asarray(np.argmax(output, axis=1), dtype=np.uint8).astype(bool)
+            if output.shape[1] == 2:
+                output = output.cpu().data.numpy()
+                output = np.asarray(np.argmax(output, axis=1), dtype=np.uint8).astype(bool)
+            else:
+                assert output.shape[1] == 1
+                output = (nn.Sigmoid()(output) > 0.5).squeeze(1).cpu().data.numpy()
             output = _connectivity_region_analysis(output)
             dices.append(dice(segs,output))
     return float(np.mean(dices)),0

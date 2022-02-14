@@ -15,6 +15,7 @@ from scipy.optimize import linear_sum_assignment
 from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
+from torch.nn.utils import clip_grad_value_
 from torch.utils import data, model_zoo
 import numpy as np
 from torch.autograd import Variable
@@ -31,6 +32,7 @@ from dataset.msm_dataset import MultiSiteMri
 from model.deeplab_multi import DeeplabMulti
 from model.discriminator import FCDiscriminator
 from model.unet import UNet2D
+from seg_jdot_utils import deep_jdot_loss_euclidean, compute_gamma, distance_loss, dice_coefficient_loss
 from utils.loss import CrossEntropy2d, freeze_model
 import fnmatch
 from configs import *
@@ -164,11 +166,13 @@ else:
         config = CC359ConfigFinetuneClustering()
     elif args.mode == 'pretrain':
         config = CC359ConfigPretrain()
-    else:
-        assert args.mode == 'their'
+    elif args.mode == 'their':
         config = CC359ConfigTheir()
+    else:
+        assert args.mode == 'jdot'
+        config = CC359ConfigJdot()
 if args.exp_name == '':
-    args.exp_name  = args.mode #+'_'+ str(args.source) + '_' + str(args.target)
+    args.exp_name  = args.mode
 best_metric = -1
 low_source_metric = 1.1
 
@@ -787,17 +791,84 @@ def train_clustering(model,optimizer,scheduler,trainloader,targetloader,val_ds,t
         else:
             model.get_bottleneck = False
         after_step(i_iter,val_ds,test_ds,model,val_ds_source)
+
+
+def train_seg_jdot(model,optimizer,scheduler,trainloader,targetloader,val_ds,test_ds,val_ds_source):
+    assert config.source_batch_size == config.target_batch_size
+    trainloader.dataset.random_patch = config.random_patch
+    targetloader.dataset.random_patch = config.random_patch
+    trainloader.dataset.patch_size = config.patch_size
+    targetloader.dataset.patch_size = config.patch_size
+
+    trainloader_iter = iter(trainloader)
+    targetloader_iter = iter(targetloader)
+    epoch_seg_loss = []
+    epoch_features_loss = []
+    optimizer.zero_grad()
+    jdot_alpha = Variable(torch.tensor(config.alpha)).to(args.gpu)
+    jdot_beta = Variable(torch.tensor(config.beta)).to(args.gpu)
+
+    for i_iter in tqdm(range(config.num_steps)):
+        if i_iter == 0:
+            continue
+        if config.use_adjust_lr:
+            adjust_learning_rate(optimizer, i_iter)
+
+        model.get_jdot_bottleneck = True
+        model.train()
+        log_log = {}
+        try:
+            batch_source = trainloader_iter.next()
+        except StopIteration:
+            trainloader_iter = iter(trainloader)
+            batch_source = trainloader_iter.next()
+        try:
+            batch_target = targetloader_iter.next()
+        except StopIteration:
+            targetloader_iter = iter(targetloader)
+            batch_target = targetloader_iter.next()
+        images_source,labels_source = batch_source
+        images_target,labels_target = batch_target
+        labels_source,labels_target = labels_source.to(args.gpu),labels_target.to(args.gpu)
+        images = torch.cat([images_source,images_target],dim=0)
+        images = Variable(images).to(args.gpu)
+
+        _, pred_before_sigmoid,features = model(images)
+        pred = nn.Sigmoid()(pred_before_sigmoid)
+        features_source,features_target = features[:len(images_source)],features[len(images_source):]
+        pred_source,pred_target = pred[:len(images_source)],pred[len(images_source):]
+        gamma = compute_gamma(features_source,features_target,labels_source,pred_target,config,jdot_alpha,jdot_beta).to(args.gpu)
+        seg_loss = deep_jdot_loss_euclidean(labels_source,pred_before_sigmoid[:len(images_source)],pred_target,gamma,jdot_beta)
+        features_loss = distance_loss(pred_source,pred_target,gamma,jdot_alpha)
+        epoch_seg_loss.append(float(seg_loss))
+
+        epoch_features_loss.append(float(features_loss))
+        losses_dict = {'seg_loss': seg_loss,'feature_loss':features_loss,'total':seg_loss+features_loss}
+        losses_dict['total'].backward()
+        clip_grad_value_(model.parameters(), 0.5)
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
+
+        optimizer.step()
+        scheduler.step()
+        optimizer.zero_grad()
+
+        log_log['seg_loss'] = float(np.mean(epoch_seg_loss))
+
+        log_log['feature_loss'] = float(np.mean(epoch_features_loss))
+        log_log['lr'] = float(scheduler.get_last_lr()[0])
+        wandb.log(log_log,step=i_iter)
+        model.get_jdot_bottleneck = False
+        if i_iter >= 1500:
+            after_step(i_iter,val_ds,test_ds,model,val_ds_source)
 def main():
     """Create the model and start the training."""
 
-    input_size = config.input_size
-    input_size_target = config.input_size
 
     cudnn.enabled = True
 
 
     # Create network
-    model = UNet2D(config.n_channels)
+    model = UNet2D(config.n_channels,n_chans_out=config.n_chans_out)
 
     if args.mode != 'pretrain':
         if args.exp_name != '':
@@ -813,7 +884,15 @@ def main():
                 k = k.replace('module.', '')
                 new_state_dict[k]=v
             state_dict = new_state_dict
-        model.load_state_dict(state_dict)
+        if args.mode == 'jdot':
+            new_state_dict = {}
+            for k, v in state_dict.items():
+                if 'out_path.3' not in k and 'out_path.4' not in k:
+                    new_state_dict[k]=v
+            state_dict = new_state_dict
+            model.load_state_dict(state_dict,strict=False)
+        else:
+            model.load_state_dict(state_dict)
         if config.msm:
             optimizer = optim.Adam(model.parameters(),
                                   lr=config.lr, weight_decay=args.weight_decay)
@@ -870,7 +949,7 @@ def main():
         val_ds = CC359Ds(load(f'{config.base_splits_path}/site_{args.target}/test_ids.json'),site=args.target,yield_id=True,slicing_interval=1)
         val_ds_source = CC359Ds(load(f'{config.base_splits_path}/site_{args.source}/val_ids.json'),site=args.source,yield_id=True,slicing_interval=1)
         test_ds = CC359Ds(load(f'{config.base_splits_path}/site_{args.target}/test_ids.json'),site=args.target,yield_id=True,slicing_interval=1)
-        project = 'adaptSegUNetNoRand'
+        project = 'adaptSegUNetNoRandJdot'
     if config.debug:
         wandb.init(
             project='spot3',
@@ -885,8 +964,8 @@ def main():
             name=args.exp_name+'_'+ str(args.source) + '_' + str(args.target),
             dir='..'
         )
-    trainloader = data.DataLoader(source_ds,batch_size=config.source_batch_size, shuffle=True, num_workers=args.num_workers,pin_memory=True)
-    targetloader = data.DataLoader(target_ds, batch_size=config.target_batch_size, shuffle=True, num_workers=args.num_workers,pin_memory=True)
+    trainloader = data.DataLoader(source_ds,batch_size=config.source_batch_size, shuffle=True, num_workers=args.num_workers,pin_memory=True,drop_last=config.drop_last)
+    targetloader = data.DataLoader(target_ds, batch_size=config.target_batch_size, shuffle=True, num_workers=args.num_workers,pin_memory=True,drop_last=config.drop_last)
 
 
     optimizer.zero_grad()
@@ -895,10 +974,11 @@ def main():
         train_pretrain(model,optimizer,scheduler,trainloader)
     elif args.mode == 'clustering_finetune':
         train_clustering(model,optimizer,scheduler,trainloader,targetloader,val_ds,test_ds,val_ds_source)
-    else:
-        assert args.mode == 'their'
+    elif args.mode == 'their':
         train_their(model,optimizer,scheduler,trainloader,targetloader,val_ds,test_ds,val_ds_source)
-
+    else:
+        assert args.mode == 'jdot'
+        train_seg_jdot(model,optimizer,scheduler,trainloader,targetloader,val_ds,test_ds,val_ds_source)
 
 
 

@@ -5,11 +5,12 @@ from dpipe.layers.conv import PreActivation2d
 
 
 class UNet2D(nn.Module):
-    def __init__(self, n_chans_in, n_chans_out=2, n_filters_init=16,get_bottleneck=False):
+    def __init__(self, n_chans_in, n_chans_out=2, n_filters_init=16,get_bottleneck=False,get_jdot_bottleneck=False):
         super().__init__()
         self.n_filters_init = n_filters_init
         n = n_filters_init
         self.get_bottleneck=get_bottleneck
+        self.get_jdot_bottleneck=get_jdot_bottleneck
 
         self.init_path = nn.Sequential(
             nn.Conv2d(n_chans_in, n, kernel_size=3, padding=1, bias=False),
@@ -72,13 +73,15 @@ class UNet2D(nn.Module):
         x2_up = self.up2(self.bottleneck(x2) + self.shortcut2(x2))
         x1_up = self.up1(x2_up + self.shortcut1(x1))
         x_out = self.out_path(x1_up + self.shortcut0(x0))
-        if self.get_bottleneck:
+        if self.get_bottleneck or self.get_jdot_bottleneck:
             bb = b_bottle
             for l in self.bottleneck[:-2]:
-
                 bb = l(bb)
+            layers_to_run =['conv_path.0','conv_path.1.bn']
+            if self.get_jdot_bottleneck:
+                layers_to_run.append('conv_path.1.activation')
             for n,l in self.bottleneck[-2].named_modules():
-                if n in ['conv_path.0','conv_path.1.bn']:
+                if n in layers_to_run:
                     bb = l(bb)
             return None,x_out,bb
         return None,x_out

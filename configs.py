@@ -1,5 +1,7 @@
 from dataclasses import dataclass
 
+import numpy as np
+
 
 @dataclass
 class CC359BaseConfig:
@@ -14,8 +16,9 @@ class CC359BaseConfig:
     n_channels = 1
     save_pred_every =  500
     epoch_every = 1000
-
+    n_chans_out = 2
     parallel_model = False
+    drop_last = False
 
 @dataclass
 class AdabnCC359Config(CC359BaseConfig):
@@ -41,6 +44,29 @@ class CC359ConfigPretrain(CC359BaseConfig):
     sched = True
     sched_gamma = 0.1
     milestones = [8000,9500]
+
+@dataclass
+class CC359ConfigJdot(CC359BaseConfig):
+
+    num_steps = 6500
+    lr = 5e-5
+    alpha = 0.001
+    beta = 0.0001
+    sched = True
+    sched_gamma = 0.1
+    milestones = [5000,6000]
+    use_adjust_lr = False
+    n_chans_out = 1
+    # random_patch = False
+    # patch_size = np.array([256,256])
+    # source_batch_size = 16
+    # target_batch_size = 16
+    random_patch = True
+    patch_size = np.array([64,64])
+    source_batch_size = 128
+    target_batch_size = 128
+    drop_last = True
+
 
 @dataclass
 class CC359ConfigFinetuneClustering(CC359BaseConfig):
@@ -92,6 +118,8 @@ class MsmBaseConfig:
     save_pred_every =  100
     epoch_every = 250
     num_steps = 3500
+    n_chans_out = 2
+    drop_last = False
 
 @dataclass
 class MsmPretrainConfig(MsmBaseConfig):

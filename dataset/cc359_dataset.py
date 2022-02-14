@@ -25,16 +25,23 @@ def extract_patch(inputs, x_patch_size, y_patch_size, spatial_dims=SPATIAL_DIMS)
     x_patch = crop_to_box(x, box=x_spatial_box, padding_values=np.min, axis=spatial_dims)
     y_patch = crop_to_box(y, box=y_spatial_box, padding_values=0, axis=spatial_dims)
     return x_patch, y_patch
-def sample_center_uniformly(shape, patch_size, spatial_dims):
+
+def get_center(shape, spatial_dims):
     spatial_shape = np.array(shape)[list(spatial_dims)]
     return spatial_shape // 2
+
+def sample_center_uniformly(shape, patch_size, spatial_dims):
+    spatial_shape = np.array(shape)[list(spatial_dims)]
     if np.all(patch_size <= spatial_shape):
         return sample_box_center_uniformly(shape=spatial_shape, box_size=patch_size)
     else:
         return spatial_shape // 2
-def get_random_patch_2d(image_slc, segm_slc, x_patch_size, y_patch_size):
+def get_patch_2d(image_slc, segm_slc, x_patch_size, y_patch_size,random_patch=False):
     sp_dims_2d = (-2, -1)
-    center = sample_center_uniformly(segm_slc.shape, y_patch_size, sp_dims_2d)
+    if random_patch:
+        center = sample_center_uniformly(segm_slc.shape, y_patch_size, sp_dims_2d)
+    else:
+        center = get_center(segm_slc.shape,sp_dims_2d)
     x, y = extract_patch((image_slc, segm_slc, center), x_patch_size, y_patch_size, spatial_dims=sp_dims_2d)
     return x, y
 
@@ -128,7 +135,9 @@ class Rescale3D(Change):
 
 
 class CC359Ds(torch.utils.data.Dataset):
-    def __init__(self,ids,site,yield_id=False,slicing_interval=1):
+    def __init__(self,ids,site,yield_id=False,slicing_interval=1,random_patch=False,patch_size=np.array([256, 256])):
+        self.patch_size =patch_size
+        self.random_patch =random_patch
         self.slicing_interval = slicing_interval
         voxel_spacing = (1, 0.95, 0.95)
         preprocessed_dataset = apply(Rescale3D(CC359(ccc359_data_path), voxel_spacing), load_image=scale_mri)
@@ -162,7 +171,7 @@ class CC359Ds(torch.utils.data.Dataset):
         self.prev_id = None
 
     def __getitem__(self, item):
-        x_patch_size = y_patch_size = np.array([256, 256])
+        x_patch_size = y_patch_size = self.patch_size
         for (i,id1),(next_i,_) in zip(self.i_to_id,self.i_to_id[1:]+[(self.len_ds,None)]):
             if i <= item < next_i:
                 if id1 != self.prev_id:
@@ -179,7 +188,7 @@ class CC359Ds(torch.utils.data.Dataset):
                 img_slc = img[...,slc_num]
                 seg_slc = seg[...,slc_num]
 
-                img_slc,seg_slc = get_random_patch_2d(img_slc,seg_slc,x_patch_size=x_patch_size,y_patch_size=y_patch_size)
+                img_slc,seg_slc = get_patch_2d(img_slc,seg_slc,x_patch_size=x_patch_size,y_patch_size=y_patch_size,random_patch=self.random_patch)
                 img_slc,seg_slc = np.expand_dims(img_slc, axis=0),np.expand_dims(seg_slc, axis=0)
                 if self.yield_id:
                     return img_slc,seg_slc,self.load_id(id1),slc_num
