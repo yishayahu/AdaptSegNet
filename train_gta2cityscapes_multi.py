@@ -848,8 +848,6 @@ def train_seg_jdot(model,optimizer,scheduler,trainloader,targetloader,val_ds,tes
         epoch_features_loss.append(float(features_loss))
         losses_dict = {'seg_loss': seg_loss,'feature_loss':features_loss,'total':seg_loss+features_loss}
         losses_dict['total'].backward()
-        clip_grad_value_(model.parameters(), 0.5)
-        torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
 
         optimizer.step()
         scheduler.step()
@@ -861,7 +859,7 @@ def train_seg_jdot(model,optimizer,scheduler,trainloader,targetloader,val_ds,tes
         log_log['lr'] = float(scheduler.get_last_lr()[0])
         wandb.log(log_log,step=i_iter)
         model.get_jdot_bottleneck = False
-        if i_iter >= 1500:
+        if  config.msm or i_iter >= 1500:
             after_step(i_iter,val_ds,test_ds,model,val_ds_source)
 def main():
     """Create the model and start the training."""
@@ -945,7 +943,7 @@ def main():
         val_ds = MultiSiteMri(load(f'{config.base_splits_path}/site_{args.target}/val_ids.json'),yield_id=True,test=True)
         val_ds_source = MultiSiteMri(load(f'{config.base_splits_path}/site_{args.source}t/val_ids.json'),yield_id=True,test=True)
         test_ds = MultiSiteMri(load(f'{config.base_splits_path}/site_{args.target}/test_ids.json'),yield_id=True,test=True)
-        project = 'adaptSegUNetMsm'
+        project = 'adaptSegUNetNoRandJdotMsm'
     else:
         source_ds = CC359Ds(load(f'{config.base_splits_path}/site_{args.source}/train_ids.json')[:config.data_len],site=args.source)
         target_ds = CC359Ds(load(f'{config.base_splits_path}/site_{args.target}/train_ids.json')[:config.data_len],site=args.target)

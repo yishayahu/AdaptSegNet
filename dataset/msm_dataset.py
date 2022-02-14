@@ -2,12 +2,14 @@ import os
 
 import numpy as np
 
+import torchvision.transforms.functional as TF
 
 import torch
 import torch.backends.cudnn as cudnn
 import SimpleITK as sitk
 from spottunet import paths
 from torch.utils.data import DataLoader
+from torchvision import transforms
 from tqdm import tqdm
 
 from paths import multiSiteMri_site_to_int
@@ -20,6 +22,9 @@ class MultiSiteMri(torch.utils.data.Dataset):
     def __init__(self, ids,yield_id=False,test=False):
         self.yield_id  = yield_id
         self.test = test
+        self.random_patch = False
+        self.patch_size = None
+
         self.patches_Allimages, self.patches_Allmasks = self.create_datalists(ids)
 
     def load_image(self,id1):
@@ -36,13 +41,21 @@ class MultiSiteMri(torch.utils.data.Dataset):
         return int(str(self.load_domain_label_number(id1)) + id1[0][-6:-4])
 
     def __getitem__(self, idx):
+
         for (i,id1),(next_i,_) in zip(self.i_to_id,self.i_to_id[1:]+[(self.len_ds,None)]):
             if i <= idx < next_i:
                 img,seg = self.patches_Allimages[id1[0]],self.patches_Allmasks[id1[0]]
                 slc_num = idx-i
+                img_slc = torch.tensor(img[slc_num])
+                seg_slc= torch.tensor(seg[slc_num])
+                if self.random_patch:
+                    x1, x2, x3, x4 = transforms.RandomCrop.get_params(
+                        img_slc, output_size=self.patch_size)
+                    img_slc = TF.crop(img_slc, x1, x2, x3, x4)
+                    seg_slc = TF.crop(seg_slc, x1, x2, x3, x4)
                 if self.yield_id:
-                    return img[slc_num],seg[slc_num],self.load_id(id1),slc_num
-                return img[slc_num],seg[slc_num]
+                    return img_slc,seg_slc,self.load_id(id1),slc_num
+                return img_slc,seg_slc
 
     def __len__(self):
         return self.len_ds

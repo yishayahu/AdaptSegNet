@@ -48,23 +48,24 @@ class CC359ConfigPretrain(CC359BaseConfig):
 @dataclass
 class CC359ConfigJdot(CC359BaseConfig):
 
-    num_steps = 6500
-    lr = 5e-5
+    num_steps = 8000
+    lr = 5e-4
     alpha = 0.001
     beta = 0.0001
-    sched = True
+    sched = False
     sched_gamma = 0.1
     milestones = [5000,6000]
     use_adjust_lr = False
     n_chans_out = 1
-    # random_patch = False
-    # patch_size = np.array([256,256])
-    # source_batch_size = 16
-    # target_batch_size = 16
-    random_patch = True
-    patch_size = np.array([64,64])
-    source_batch_size = 128
-    target_batch_size = 128
+    random_patch = False
+    patch_size = np.array([256,256])
+    source_batch_size = 16
+    target_batch_size = 16
+
+    # random_patch = True
+    # patch_size = np.array([64,64])
+    # source_batch_size = 128
+    # target_batch_size = 128
     drop_last = True
 
 
@@ -168,22 +169,23 @@ class AdabnMsmConfig(MsmBaseConfig):
 
 @dataclass
 class MsmConfigJdot(MsmBaseConfig):
-    lr = 5e-4
-    alpha = 0.001
-    beta = 0.0001
+    lr = 1e-4
+    alpha = 0.005
+    beta = 0.0005
     sched = True
     sched_gamma = 0.1
-    milestones = [5000,6000]
+    milestones = [2000,3000]
     use_adjust_lr = False
     n_chans_out = 1
-    random_patch = False
-    patch_size = np.array([384,384])
-    source_batch_size = 16
-    target_batch_size = 16
-    # random_patch = True
-    # patch_size = np.array([64,64])
-    # source_batch_size = 128
-    # target_batch_size = 128
+    # random_patch = False
+    # patch_size = np.array([384,384])
+    # source_batch_size = 8
+    # target_batch_size = 8
+    random_patch = True
+    patch_size = np.array([64,64])
+    source_batch_size = 32
+    target_batch_size = 32
     drop_last = True
+    parallel_model = False
 
 
