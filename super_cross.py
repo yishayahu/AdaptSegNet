@@ -144,7 +144,7 @@ def run_cross_validation(experiments, combs, only_stats=False):
 
 
 def main():
-    experiments = ['clustering_finetune','their','adaBN']
+    experiments = ['jdot']
     combs = list(itertools.permutations(range(6), 2))
     # combs = [(1,3),(0, 4), (3, 1), (2, 5), (2, 3)]
     run_cross_validation(only_stats=False, experiments=experiments, combs=combs)
