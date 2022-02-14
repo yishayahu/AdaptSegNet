@@ -166,6 +166,24 @@ class AdabnMsmConfig(MsmBaseConfig):
     batch_size = 16
 
 
-
+@dataclass
+class MsmConfigJdot(MsmBaseConfig):
+    lr = 5e-4
+    alpha = 0.001
+    beta = 0.0001
+    sched = True
+    sched_gamma = 0.1
+    milestones = [5000,6000]
+    use_adjust_lr = False
+    n_chans_out = 1
+    random_patch = False
+    patch_size = np.array([384,384])
+    source_batch_size = 16
+    target_batch_size = 16
+    # random_patch = True
+    # patch_size = np.array([64,64])
+    # source_batch_size = 128
+    # target_batch_size = 128
+    drop_last = True
 
 

@@ -156,9 +156,12 @@ if args.msm:
         config = MsmConfigFinetuneClustering()
     elif args.mode == 'pretrain':
         config = MsmPretrainConfig()
+    elif args.mode == 'their':
+        raise NotImplementedError()
     else:
-        assert args.mode == 'their'
-        raise NotImplemented()
+        assert args.mode == 'jdot'
+        config = MsmConfigJdot()
+
 else:
     if 'debug' in args.exp_name:
       config = DebugConfigCC359()
