@@ -837,12 +837,13 @@ def train_seg_jdot(model,optimizer,scheduler,trainloader,targetloader,val_ds,tes
         images = Variable(images).to(args.gpu)
 
         _, pred_before_sigmoid,features = model(images)
-        pred = nn.Sigmoid()(pred_before_sigmoid)
+        pred = nn.Softmax(1)(pred_before_sigmoid)
+        # pred = nn.Sigmoid()(pred_before_sigmoid)
         features_source,features_target = features[:len(images_source)],features[len(images_source):]
         pred_source,pred_target = pred[:len(images_source)],pred[len(images_source):]
-        gamma = compute_gamma(features_source,features_target,labels_source,pred_target,config,jdot_alpha,jdot_beta).to(args.gpu)
-        seg_loss = deep_jdot_loss_euclidean(labels_source,pred_before_sigmoid[:len(images_source)],pred_target,gamma,jdot_beta)
-        features_loss = distance_loss(pred_source,pred_target,gamma,jdot_alpha)
+        gamma = compute_gamma(features_source,features_target,labels_source,pred_target[:,1:,:,:],config,jdot_alpha,jdot_beta).to(args.gpu)
+        seg_loss = deep_jdot_loss_euclidean(labels_source,pred_before_sigmoid[:len(images_source)],pred_target[:,1:,:,:],gamma,jdot_beta)
+        features_loss = distance_loss(pred_source[:,1:,:,:],pred_target[:,1:,:,:],gamma,jdot_alpha)
         epoch_seg_loss.append(float(seg_loss))
 
         epoch_features_loss.append(float(features_loss))
@@ -886,17 +887,17 @@ def main():
                 new_state_dict[k]=v
             state_dict = new_state_dict
         if args.mode == 'jdot':
-            new_state_dict = {}
-            for k, v in state_dict.items():
-                if 'out_path.3' not in k and 'out_path.4' not in k:
-                    new_state_dict[k]=v
-            state_dict = new_state_dict
+            # new_state_dict = {}
+            # for k, v in state_dict.items():
+            #     if 'out_path.3' not in k and 'out_path.4' not in k:
+            #         new_state_dict[k]=v
+            # state_dict = new_state_dict
             model.load_state_dict(state_dict,strict=False)
         else:
             model.load_state_dict(state_dict)
         if config.msm:
             optimizer = optim.Adam(model.parameters(),
-                                  lr=config.lr, weight_decay=args.weight_decay)
+                                   lr=config.lr, weight_decay=args.weight_decay)
         else:
             optimizer = optim.SGD(model.parameters(),
                                   lr=config.lr, momentum=args.momentum, weight_decay=args.weight_decay,nesterov=True)

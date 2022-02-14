@@ -56,7 +56,7 @@ class CC359ConfigJdot(CC359BaseConfig):
     sched_gamma = 0.1
     milestones = [5000,6000]
     use_adjust_lr = False
-    n_chans_out = 1
+    n_chans_out = 2
     random_patch = False
     patch_size = np.array([256,256])
     source_batch_size = 16
@@ -176,7 +176,7 @@ class MsmConfigJdot(MsmBaseConfig):
     sched_gamma = 0.1
     milestones = [2000,3000]
     use_adjust_lr = False
-    n_chans_out = 1
+    n_chans_out = 2
     # random_patch = False
     # patch_size = np.array([384,384])
     # source_batch_size = 8

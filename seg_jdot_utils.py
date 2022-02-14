@@ -4,6 +4,7 @@ import ot
 from torch.nn import BCEWithLogitsLoss
 
 from metric_utils import dice_torch
+from utils.loss import CrossEntropy2d
 
 
 def dice_coefficient_loss(y_true, y_pred):
@@ -22,7 +23,7 @@ def euclidean_dist(x,y):
     :param y:
     :return: A matrix of size n_batch*n_batch where each entry represent the euclidean distance between one source sample and one target sample.
     """
-    temp = torch.cdist(x.unsqueeze(0),y.unsqueeze(0))[0]
+    temp = torch.cdist(x.unsqueeze(0).contiguous(),y.unsqueeze(0).contiguous())[0]
     return temp
     # bs = x.shape[0]
     # dist = torch.reshape(torch.sum(torch.square(x), 1), (-1, 1)).repeat(1,bs)
@@ -33,7 +34,7 @@ def euclidean_dist(x,y):
 
 def deep_jdot_loss_euclidean(labels_source, prediction_source,prediction_target,gamma,jdot_beta,only_seg =False):
     # source_loss = dice_coefficient_loss(labels_source, prediction_source)
-    source_loss = BCEWithLogitsLoss()(prediction_source,labels_source.float())
+    source_loss = CrossEntropy2d()(prediction_source,labels_source.long())
     if only_seg:return source_loss
     target_loss = euclidean_dist(torch.flatten(labels_source,1), torch.flatten(prediction_target,1))
     return source_loss + jdot_beta * torch.sum(gamma * target_loss)
