@@ -976,7 +976,7 @@ def main():
 
     if args.mode == 'pretrain':
         train_pretrain(model,optimizer,scheduler,trainloader)
-    elif args.mode == 'clustering_finetune':
+    elif args.mode == 'clustering_finetune' or args.mode == 'ablation':
         train_clustering(model,optimizer,scheduler,trainloader,targetloader,val_ds,test_ds,val_ds_source)
     elif args.mode == 'their':
         train_their(model,optimizer,scheduler,trainloader,targetloader,val_ds,test_ds,val_ds_source)
