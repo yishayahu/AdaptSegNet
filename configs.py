@@ -70,6 +70,23 @@ class CC359ConfigJdot(CC359BaseConfig):
 
 
 @dataclass
+class CC359ConfigAblation(CC359BaseConfig):
+    use_accumulate_for_loss = False
+    source_batch_size = 8
+    target_batch_size = 8
+    n_clusters = 12
+    num_steps = 6500
+    lr = 5e-6
+    use_slice_num = True
+    id_to_num_slices = '/home/dsi/shaya/id_to_num_slices.json'
+    dist_loss_lambda = 0.9
+    sched = True
+    sched_gamma = 0.1
+    milestones = [5000,6000]
+    use_adjust_lr = False
+
+
+@dataclass
 class CC359ConfigFinetuneClustering(CC359BaseConfig):
     source_batch_size = 8
     target_batch_size = 8

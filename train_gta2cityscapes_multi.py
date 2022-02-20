@@ -171,6 +171,8 @@ else:
         config = CC359ConfigPretrain()
     elif args.mode == 'their':
         config = CC359ConfigTheir()
+    elif args.mode =='ablation':
+        config = CC359ConfigAblation()
     else:
         assert args.mode == 'jdot'
         config = CC359ConfigJdot()
