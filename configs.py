@@ -133,9 +133,9 @@ class MsmBaseConfig:
     base_res_path ='/home/dsi/shaya/unsup_resres_msm/'
     msm = True
     n_channels= 3
-    save_pred_every =  100
-    epoch_every = 250
-    num_steps = 3500
+    save_pred_every = 50# 100
+    epoch_every = 50#250
+    num_steps = 2500#3500
     n_chans_out = 2
     drop_last = False
 
@@ -150,17 +150,17 @@ class MsmPretrainConfig(MsmBaseConfig):
 @dataclass
 class MsmConfigFinetuneClustering(MsmBaseConfig):
     n_clusters = 8
-    lr = 1e-5
+    lr = 1e-6
     use_slice_num = True
     id_to_num_slices = '/home/dsi/shaya/id_to_num_slices_msm.json'
     source_batch_size = 8
     target_batch_size = 8
-    dist_loss_lambda = 0.1
+    dist_loss_lambda = 0.8
     parallel_model = True
     sched = False
-    acc_amount = 60
+    acc_amount = 20
     sched_gamma = 0.1
-    milestones = [1500,2500]
+    milestones = [1000,2000,3000]
     use_adjust_lr = False
 
 
