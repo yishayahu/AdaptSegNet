@@ -117,9 +117,9 @@ def run_cross_validation(experiments, combs, only_stats=False):
                 time.sleep(5)
             else:
                 print(f'loading exists on source {source} target {target} exp {exp}')
-                # scores =json.load(open(scores_path))
-                sdice = 0#scores['sdice/test']
-                best_sdice = 0#scores['sdice/test_best']
+                scores =json.load(open(scores_path))
+                sdice = scores['sdice_end/test']
+                best_sdice = scores['sdice_end/test_low_source_on_target']
                 sdice = max(sdice,best_sdice)
                 stats[exp][f's_{source} t_{target}'] = sdice
     still_running = running_now
@@ -144,13 +144,14 @@ def run_cross_validation(experiments, combs, only_stats=False):
 
 
 def main():
-    experiments = ['ablation']
+    experiments = ['clustering_finetune']
     combs = list(itertools.permutations(range(6), 2))
-    combs = [(1,3),(0, 4), (3, 1), (2, 5), (2, 3)]
-    run_cross_validation(only_stats=False, experiments=experiments, combs=combs)
+    # combs = [(1,3),(0, 4), (3, 1), (2, 3)]
+    run_cross_validation(only_stats=True, experiments=experiments, combs=combs)
 
 
 if __name__ == '__main__':
 
     config = CC359BaseConfig()
+    # config = MsmBaseConfig()
     main()

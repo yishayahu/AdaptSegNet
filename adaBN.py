@@ -57,6 +57,10 @@ def run_adaBN(source, target, device):
         epochs = 1
     targetloader = data.DataLoader(target_ds, batch_size=config.batch_size, shuffle=True)
     model.train()
+    for m in model.modules():
+        classname = m.__class__.__name__
+        if classname.find("BatchNorm") != -1:
+            m.reset_running_stats()
     first_pred = []
     for i in range(epochs):
         with torch.no_grad():
@@ -84,9 +88,9 @@ def run_adaBN(source, target, device):
 
 def main():
     cli = argparse.ArgumentParser()
-    cli.add_argument("--device")
-    cli.add_argument("--source")
-    cli.add_argument("--target")
+    cli.add_argument("--device",default='cpu')
+    cli.add_argument("--source",default=1)
+    cli.add_argument("--target",default=1)
 
     opts = cli.parse_args()
     if config.msm:
@@ -102,6 +106,7 @@ def main():
 
 
 if __name__ == '__main__':
+    # config = AdabnMsmConfig()
     config = AdabnCC359Config()
     main()
 
